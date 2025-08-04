@@ -116,4 +116,4 @@ This project is open-source and available under the MIT License.
 
 ---
 
-**Last Updated**: January 2025
+**Last Updated**: 05 August 2025

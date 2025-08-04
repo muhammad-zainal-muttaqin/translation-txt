@@ -57,6 +57,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // State Management
     const state = {
         uploadedFileContent: '',
+        uploadedFileName: '',
         translatedChunks: [],
         originalChunks: [],
         translationAborted: false,
@@ -126,6 +127,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const reader = new FileReader();
             reader.onload = (e) => {
                 state.uploadedFileContent = e.target.result;
+                state.uploadedFileName = file.name;
                 const lines = state.uploadedFileContent.split('\n');
                 const lineCount = lines.length;
 
@@ -289,6 +291,73 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const mergeChunks = (chunks) => chunks.join('\n');
 
+    // Build robust translation prompt based on file format
+    const buildRobustTranslationPrompt = (content, sourceLang, targetLang, customInstruction) => {
+        // Detect file format from current file info
+        const fileName = state.uploadedFileName || '';
+        const fileExtension = fileName.split('.').pop()?.toLowerCase() || 'txt';
+        
+        const basePrompt = `CRITICAL TRANSLATION RULES - FOLLOW EXACTLY:
+
+1. PRESERVE STRUCTURE: Maintain EXACT same number of lines, paragraphs, sections, and formatting
+2. PRESERVE SYNTAX: Keep all markup, tags, delimiters, brackets, quotes, and special characters UNCHANGED  
+3. TRANSLATE ONLY CONTENT: Only translate readable text content, NOT structure elements
+4. NO ADDITIONS: Do not add explanations, notes, or extra content
+5. NO DELETIONS: Do not remove or skip any part of the original
+6. NO REFORMATTING: Keep exact spacing, indentation, and line breaks
+
+TRANSLATION TASK:
+- Source Language: ${sourceLang}
+- Target Language: ${targetLang}
+- Content Type: ${fileExtension.toUpperCase()}
+
+${customInstruction ? `CUSTOM INSTRUCTION: ${customInstruction}\n` : ''}
+
+`;
+
+        const formatSpecificRules = {
+            'txt': 'TRANSLATE TEXT FILE - CRITICAL RULES:\n- Keep exact line breaks and paragraph spacing\n- Preserve any special formatting (bullets, numbers, dashes)\n- Translate only readable text, keep symbols unchanged\n- Maintain exact character count per line structure where possible\n- Do not merge or split paragraphs',
+            
+            'csv': 'TRANSLATE CSV FILE - CRITICAL RULES:\n- Preserve ALL commas, quotes, and delimiters EXACTLY\n- Keep header row structure identical\n- Translate only cell content, NOT column names (unless specified)\n- Maintain exact number of columns and rows\n- Preserve empty cells as empty\n- Keep any escape characters or special CSV formatting',
+            
+            'md': 'TRANSLATE MARKDOWN FILE - CRITICAL RULES:\n- Keep ALL markdown syntax: #, *, **, _, `, [], (), etc.\n- Preserve exact heading levels and structure\n- Keep link URLs unchanged, translate only link text\n- Maintain code blocks untranslated (```code```)\n- Keep table structure identical\n- Preserve line breaks and spacing exactly',
+            
+            'json': 'TRANSLATE JSON FILE - CRITICAL RULES:\n- Keep ALL JSON syntax: {}, [], "", :, , exactly as is\n- Translate only string VALUES, never keys or structure\n- Maintain exact indentation and formatting\n- Preserve escape characters (\\n, \\t, \\", etc.)\n- Keep numeric and boolean values unchanged\n- Ensure valid JSON output',
+            
+            'srt': 'TRANSLATE SUBTITLE FILE - CRITICAL RULES:\n- Keep ALL timestamp formats EXACTLY (00:00:00,000 --> 00:00:00,000)\n- Preserve subtitle numbering sequence\n- Maintain exact timing and cue structure\n- Translate only subtitle text content\n- Keep speaker labels if present\n- Preserve line breaks within subtitles',
+            
+            'vtt': 'TRANSLATE SUBTITLE FILE - CRITICAL RULES:\n- Keep ALL timestamp formats EXACTLY (00:00:00.000 --> 00:00:00.000)\n- Preserve cue timing and WebVTT format\n- Maintain exact timing and cue structure\n- Translate only subtitle text content\n- Keep speaker labels if present\n- Preserve line breaks within subtitles',
+            
+            'xml': 'TRANSLATE XML FILE - CRITICAL RULES:\n- Keep ALL XML tags unchanged: <tag>, </tag>, <tag/>\n- Preserve attributes and values in tags\n- Translate only text content between tags\n- Maintain exact tag hierarchy and nesting\n- Keep CDATA sections format\n- Preserve XML declarations and namespaces',
+            
+            'yaml': 'TRANSLATE YAML FILE - CRITICAL RULES:\n- Keep ALL YAML syntax: indentation, dashes, colons\n- Preserve exact spacing and structure\n- Translate only string values, keep keys unchanged\n- Maintain list and dictionary structures\n- Keep comments (# lines) in original language or translate if needed\n- Preserve multi-line string formats',
+            
+            'yml': 'TRANSLATE YAML FILE - CRITICAL RULES:\n- Keep ALL YAML syntax: indentation, dashes, colons\n- Preserve exact spacing and structure\n- Translate only string values, keep keys unchanged\n- Maintain list and dictionary structures\n- Keep comments (# lines) in original language or translate if needed\n- Preserve multi-line string formats',
+            
+            'log': 'TRANSLATE LOG FILE - CRITICAL RULES:\n- Keep ALL timestamps and log levels unchanged\n- Preserve exact log entry format and structure\n- Translate only human-readable message content\n- Keep technical identifiers, IPs, codes unchanged\n- Maintain chronological order\n- Preserve any log formatting patterns'
+        };
+        
+        const specificRule = formatSpecificRules[fileExtension] || 'Preserve original formatting exactly.';
+        
+        const validationPrompt = `
+
+VALIDATION CHECKPOINT:
+Before outputting, verify:
+✓ Same number of lines as input
+✓ Same structure/format preserved  
+✓ No missing content
+✓ No added explanations
+✓ Syntax elements unchanged
+✓ Only content text translated
+
+INPUT CONTENT:
+${content}
+
+OUTPUT: Return the exact same structure with only the translatable text converted to target language.`;
+
+        return basePrompt + specificRule + validationPrompt;
+    };
+
     const updateProgress = (done, total) => {
         const pct = total > 0 ? Math.round((done / total) * 100) : 0;
         elements.translation.progressBar.style.width = `${pct}%`;
@@ -374,8 +443,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!apiKey) throw new Error('API key not filled.');
         if (!modelName || modelName.trim() === '') throw new Error('Model name not filled.');
 
-        // Build prompt
-        const prompt = `${instruction}\n\nSource (${sourceLang}) -> Target (${targetLang}):\n\n${chunk}`;
+        // Build robust translation prompt based on file format
+        const prompt = buildRobustTranslationPrompt(chunk, sourceLang, targetLang, instruction);
 
         if (provider === 'google') {
             const data = await callGoogle(apiKey, modelName, prompt);
@@ -506,6 +575,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (confirm('Are you sure you want to clear all progress? Uploaded file and translation results will be deleted.')) {
             // Reset state
             state.uploadedFileContent = '';
+            state.uploadedFileName = '';
             state.translatedChunks = [];
             state.originalChunks = [];
             state.translationAborted = false;
