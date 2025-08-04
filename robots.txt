@@ -1,0 +1,18 @@
+User-agent: *
+Allow: /
+
+# Sitemap (jika ada)
+# Sitemap: https://yourdomain.com/sitemap.xml
+
+# Disallow API calls and sensitive files
+Disallow: /api/
+Disallow: /*.key
+Disallow: /secrets.txt
+Disallow: /api-keys.txt
+
+# Allow all other files
+Allow: /index.html
+Allow: /style.css
+Allow: /script.js
+Allow: /manifest.json
+Allow: /sw.js 

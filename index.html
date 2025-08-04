@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Translation TXT - Multi-Provider LLM Translator</title>
+    <meta name="description" content="Aplikasi web untuk menerjemahkan file teks menggunakan berbagai LLM API provider. Mendukung OpenRouter, Cerebras, dan Google Gemini.">
+    <meta name="keywords" content="translation, LLM, AI, text translator, openrouter, cerebras, gemini, file translator">
+    <meta name="author" content="Translation TXT">
+    <meta name="robots" content="index, follow">
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Translation TXT - Multi-Provider LLM Translator">
+    <meta property="og:description" content="Terjemahkan file teks dengan berbagai LLM API provider">
+    <meta property="og:image" content="https://via.placeholder.com/1200x630/6366f1/ffffff?text=Translation+TXT">
+    
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:title" content="Translation TXT - Multi-Provider LLM Translator">
+    <meta property="twitter:description" content="Terjemahkan file teks dengan berbagai LLM API provider">
+    <meta property="twitter:image" content="https://via.placeholder.com/1200x630/6366f1/ffffff?text=Translation+TXT">
+    
+    <!-- Favicon -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌐</text></svg>">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌐</text></svg>">
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#6366f1">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Translation TXT">
+    
+    <link rel="stylesheet" href="style.css">
+    
+    <!-- Preload critical resources -->
+    <link rel="preload" href="script.js" as="script">
+</head>
+<body>
+    <header>
+        <h1>✨ Translation TXT</h1>
+    </header>
+    <main>
+        <section>
+            <h2>📂 Unggah File</h2>
+            <div id="drag-drop-area" class="drag-drop-area">Seret & letakkan file di sini atau klik untuk memilih</div>
+            <input type="file" id="file-input" accept=".txt,.csv,.md,.json,.log,.srt,.vtt,.xml,.yaml,.yml">
+            <div id="file-info" style="display:none;">
+                <p>Nama File: <span id="file-name"></span></p>
+                <p>Ukuran: <span id="file-size"></span></p>
+                <p>Jumlah Baris: <span id="line-count"></span></p>
+            </div>
+            <p style="color:#94a3b8;margin:8px 0 0">Mendukung berbagai format teks umum.</p>
+        </section>
+
+        <section>
+            <h2>⚙️ Pengaturan API</h2>
+            <div class="api-settings">
+                <label for="api-provider">Penyedia API</label>
+                <select id="api-provider">
+                    <option value="openrouter">OpenRouter</option>
+                    <option value="cerebras">Cerebras</option>
+                    <option value="google">Google Gemini</option>
+                </select>
+
+                <label for="model-name-input">Nama Model</label>
+                <input type="text" id="model-name-input" placeholder="Contoh: qwen/qwen3-4b:free, llama-4-scout-17b-16e-instruct, gemini-2.5-flash-lite">
+                <small class="helper">Masukkan nama model sesuai provider yang dipilih.</small>
+
+                <label for="api-key-input">API Key</label>
+                <input type="password" id="api-key-input" placeholder="Masukkan API key Anda">
+                <small class="helper">Kunci disimpan lokal di browser Anda.</small>
+
+                <div class="inline-hint">
+                    <span class="hint">Tip: Pastikan nama model sesuai dengan provider yang dipilih.</span>
+                </div>
+            </div>
+        </section>
+
+        <section>
+            <h2>🌐 Pengaturan Bahasa</h2>
+            <label for="source-language">Bahasa Sumber</label>
+            <select id="source-language">
+                <option value="auto">Deteksi Otomatis</option>
+                <option value="en">Inggris</option>
+                <option value="id">Indonesia</option>
+                <option value="ja">Jepang</option>
+                <option value="es">Spanyol</option>
+            </select>
+
+            <label for="target-language">Bahasa Tujuan</label>
+            <select id="target-language">
+                <option value="id">Indonesia</option>
+                <option value="en">Inggris</option>
+                <option value="ja">Jepang</option>
+                <option value="es">Spanyol</option>
+            </select>
+        </section>
+
+        <section>
+            <h2>📝 Instruksi Khusus</h2>
+            <label for="custom-instruction-text">Gaya/konteks terjemahan (opsional)</label>
+            <textarea id="custom-instruction-text" placeholder="Contoh: Gunakan bahasa santai dan ringkas."></textarea>
+            <div class="checkbox-row">
+                <input type="checkbox" id="use-default-instruction" checked>
+                <label for="use-default-instruction">Gunakan instruksi standar yang direkomendasikan</label>
+            </div>
+        </section>
+
+        <section>
+            <h2>✂️ Opsi Pemisahan</h2>
+            <div class="split-card">
+                <div class="toggle-row">
+                    <input type="checkbox" id="auto-split-toggle" checked>
+                    <label for="auto-split-toggle">Pemisahan Otomatis (disarankan)</label>
+                </div>
+                <div class="grid-2" id="manual-split-grid">
+                    <div>
+                        <label for="max-lines-per-chunk">Maks. baris per chunk</label>
+                        <input type="number" id="max-lines-per-chunk" value="300" min="1">
+                    </div>
+                    <div>
+                        <label for="overlap-lines">Overlap baris antarchunk</label>
+                        <input type="number" id="overlap-lines" value="0" min="0">
+                    </div>
+                </div>
+                <div class="statistics">
+                    <p id="split-calculation">Menunggu file diunggah...</p>
+                </div>
+            </div>
+        </section>
+
+        <section>
+            <h2>🚀 Kontrol</h2>
+            <div class="btn-row">
+                <button id="start-translation">Mulai Terjemahkan</button>
+                <button id="pause-translation" disabled>Jeda</button>
+                <button id="resume-translation" disabled>Lanjut</button>
+                <button id="cancel-translation" disabled>Batalkan</button>
+            </div>
+
+            <div class="progress-bar-container">
+                <div class="progress-bar" id="progress-bar"></div>
+                <div id="progress-text">0%</div>
+            </div>
+
+            <div id="log-panel">
+                <h3>📜 Log</h3>
+                <div id="log-content"></div>
+            </div>
+            <div id="error-message" class="error-message" style="display:none"></div>
+        </section>
+
+        <section>
+            <h2>🧩 Hasil</h2>
+            <div class="split-view">
+                <div class="original-view">
+                    <h3>Teks Asli</h3>
+                    <pre id="original-text-preview"></pre>
+                </div>
+                <div class="translated-view">
+                    <h3>Hasil Terjemahan</h3>
+                    <pre id="translated-text-preview"></pre>
+                </div>
+            </div>
+
+            <div class="download-options">
+                <button class="download-txt" id="download-single-txt">Unduh .txt</button>
+                <button class="download-zip" id="download-zip">Unduh .zip</button>
+                <button class="copy-clipboard" id="copy-to-clipboard">Salin ke Clipboard</button>
+            </div>
+        </section>
+
+        <footer>
+            Dibuat dengan ❤️ untuk produktivitas terjemahan teks.
+        </footer>
+    </main>
+
+    <!-- Loading indicator -->
+    <div id="loading-overlay" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,0.9);display:flex;align-items:center;justify-content:center;z-index:9999;">
+        <div style="text-align:center;color:white;">
+            <div style="font-size:2rem;margin-bottom:1rem;">🌐</div>
+            <div>Loading Translation TXT...</div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+    
+    <!-- Service Worker Registration -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then((registration) => {
+                        console.log('SW registered: ', registration);
+                    })
+                    .catch((registrationError) => {
+                        console.log('SW registration failed: ', registrationError);
+                    });
+            });
+        }
+        
+        // Hide loading overlay when page is ready
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                const overlay = document.getElementById('loading-overlay');
+                if (overlay) {
+                    overlay.style.opacity = '0';
+                    overlay.style.transition = 'opacity 0.5s ease';
+                    setTimeout(() => overlay.remove(), 500);
+                }
+            }, 1000);
+        });
+    </script>
+</body>
+</html>

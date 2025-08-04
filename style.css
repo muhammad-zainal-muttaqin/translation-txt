@@ -1,0 +1,71 @@
+:root{--bg:#0f172a;--surface:#111827;--card:#0b1220;--muted:#94a3b8;--text:#e5e7eb;--primary:#6366f1;--primary-600:#5458e8;--primary-700:#474bdc;--accent:#22d3ee;--success:#22c55e;--danger:#ef4444;--warning:#f59e0b;--ring:rgba(99,102,241,0.35)}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";margin:0;padding:0;background: radial-gradient(1200px 600px at 10% -10%, rgba(34,211,238,0.15), transparent 60%), radial-gradient(1000px 500px at 110% 10%, rgba(99,102,241,0.18), transparent 60%), var(--bg);color:var(--text)}
+
+header{background:linear-gradient(135deg, rgba(99,102,241,0.35), rgba(34,211,238,0.25));backdrop-filter: blur(6px);-webkit-backdrop-filter: blur(6px);color:white;padding:24px 0;text-align:center;border-bottom:1px solid rgba(255,255,255,0.08);box-shadow:0 10px 30px rgba(0,0,0,0.15)}
+header h1{margin:0;font-weight:700;letter-spacing:0.3px;text-shadow:0 2px 18px rgba(99,102,241,0.45)}
+
+main{padding:24px;max-width:1200px;margin:24px auto;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0));border:1px solid rgba(255,255,255,0.06);border-radius:16px;box-shadow:0 15px 40px rgba(0,0,0,0.25)}
+
+section{margin-bottom:28px;padding:20px;border:1px solid rgba(255,255,255,0.06);border-radius:16px;background:linear-gradient(180deg, rgba(17,24,39,0.8), rgba(2,6,23,0.7));box-shadow:0 10px 30px rgba(0,0,0,0.25)}
+
+h2{color:#e2e8f0;border-bottom:1px dashed rgba(148,163,184,0.25);padding-bottom:10px;margin-bottom:18px;display:flex;align-items:center;gap:10px}
+
+.drag-drop-area{border:2px dashed rgba(148,163,184,0.35);padding:38px;text-align:center;cursor:pointer;margin-bottom:20px;border-radius:14px;transition:all .25s ease;background:rgba(2,6,23,0.35)}
+.drag-drop-area:hover{background:rgba(99,102,241,0.08);border-color:rgba(99,102,241,0.6);box-shadow:0 10px 24px rgba(99,102,241,0.15)}
+
+input[type="file"]{display:none}
+
+label{font-weight:600;margin-bottom:6px;display:inline-block;color:#cbd5e1}
+
+select,input[type="number"],input[type="text"],textarea,input[type="password"]{width:100%;padding:12px 12px;margin-bottom:14px;border:1px solid rgba(148,163,184,0.25);border-radius:10px;font-size:0.98rem;background:rgba(15,23,42,0.7);color:var(--text);outline: none;transition:border .2s, box-shadow .2s}
+select:focus,input[type="number"]:focus,input[type="text"]:focus,textarea:focus,input[type="password"]:focus{border-color:var(--primary);box-shadow:0 0 0 4px var(--ring)}
+
+textarea{resize:vertical;min-height:120px}
+
+.api-settings{margin-bottom:18px}
+.api-settings label{display:block;margin-bottom:6px;font-weight:700}
+
+/* New layout helpers */
+.btn-row{display:flex;flex-wrap:wrap;gap:10px}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.split-card{border:1px solid rgba(148,163,184,0.25);border-radius:12px;padding:12px;background:rgba(2,6,23,0.35)}
+.toggle-row{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.checkbox-row{display:flex;align-items:center;gap:10px;margin-top:6px}
+.helper{display:block;color:#94a3b8;margin:6px 0 0}
+.inline-hint .hint{color:#94a3b8;font-size:.9rem}
+
+button{background:linear-gradient(135deg, var(--primary), var(--primary-600));color:white;padding:10px 18px;border:none;border-radius:10px;cursor:pointer;font-size:0.98rem;margin-right:10px;transition:transform .12s ease, filter .2s ease, box-shadow .2s ease;box-shadow:0 8px 18px rgba(79,70,229,0.35)}
+button:hover{filter:brightness(1.08);transform:translateY(-1px)}
+button:active{transform:translateY(0)}
+button:disabled{background:linear-gradient(135deg, #475569, #334155);box-shadow:none;cursor:not-allowed}
+
+.progress-bar-container{background:rgba(2,6,23,0.55);border:1px solid rgba(148,163,184,0.25);border-radius:10px;margin-top:16px;height:22px;overflow:hidden;position:relative}
+.progress-bar{height:100%;width:0%;background:repeating-linear-gradient(45deg, var(--success), var(--success) 10px, #28a745 10px, #28a745 20px);border-radius:10px;text-align:center;color:white;line-height:22px;transition:width .45s ease}
+#progress-text{position:absolute;width:100%;text-align:center;line-height:22px;top:0;left:0;color:#cbd5e1;font-size:.88rem}
+
+#log-panel{background:rgba(15,23,42,0.6);border:1px solid rgba(148,163,184,0.25);border-radius:12px;padding:14px;margin-top:16px}
+#log-panel h3{margin-top:0;color:#e2e8f0}
+#log-content{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;white-space:pre-wrap;word-break:break-word;max-height:220px;overflow-y:auto;background:rgba(2,6,23,0.55);padding:12px;border-radius:10px;color:#cbd5e1}
+
+.split-view{display:flex;gap:18px;margin-top:18px;flex-wrap:wrap}
+.original-view,.translated-view{flex:1;min-width:300px;border:1px solid rgba(148,163,184,0.25);border-radius:14px;padding:14px;background:linear-gradient(180deg, rgba(15,23,42,0.7), rgba(2,6,23,0.6));box-shadow:0 10px 24px rgba(0,0,0,0.2)}
+.split-view h3{color:#e2e8f0;margin-top:0;border-bottom:1px dashed rgba(148,163,184,0.25);padding-bottom:8px;margin-bottom:10px}
+.split-view pre{white-space:pre-wrap;word-break:break-word;max-height:220px;overflow-y:auto;background:rgba(2,6,23,0.55);padding:12px;border-radius:10px;color:#e5e7eb}
+
+button.download-txt{background:linear-gradient(135deg, #10b981, #059669)}
+button.download-txt:hover{filter:brightness(1.08)}
+button.download-zip{background:linear-gradient(135deg, #ef4444, #dc2626)}
+button.download-zip:hover{filter:brightness(1.08)}
+button.copy-clipboard{background:linear-gradient(135deg, #0ea5e9, #0284c7)}
+button.copy-clipboard:hover{filter:brightness(1.08)}
+
+.download-options,.statistics{margin-top:18px;padding-top:12px;border-top:1px dashed rgba(148,163,184,0.25)}
+.statistics p{margin:6px 0;color:#cbd5e1}
+
+footer{text-align:center;padding:20px;margin-top:28px;color:#94a3b8;font-size:.92rem;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0));border-top:1px solid rgba(255,255,255,0.06)}
+
+.error-message{background:linear-gradient(135deg, rgba(239,68,68,0.15), rgba(239,68,68,0.08));border:1px solid rgba(239,68,68,0.35);color:#fecaca;padding:12px 14px;border-radius:10px;margin-top:12px}
+
+@media (max-width: 768px){main{padding:16px}button{width:100%;margin-right:0;margin-bottom:10px}.split-view{flex-direction:column}.grid-2{grid-template-columns:1fr}}
