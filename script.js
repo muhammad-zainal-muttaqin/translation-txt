@@ -140,8 +140,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     (state.uploadedFileContent.length > 2000 ? '...' : '');
                 elements.file.preview.style.display = 'block';
 
-                updateSplitCalculation();
-                log(`File loaded: ${file.name} (${lineCount} lines)`);
+                // Force update split calculation after file is loaded
+                setTimeout(() => {
+                    updateSplitCalculation();
+                    log(`File loaded: ${file.name} (${lineCount} lines)`);
+                }, 100);
             };
             reader.readAsText(file);
         }
@@ -249,6 +252,9 @@ document.addEventListener('DOMContentLoaded', () => {
             elements.splitting.calculationPara.textContent = 'Belum ada file yang dimuat.';
             return;
         }
+        
+        // Debug: log file content status
+        console.log('updateSplitCalculation called, file content length:', state.uploadedFileContent.length);
         const totalLines = state.uploadedFileContent.split('\n').length;
         let effMax = Math.max(1, maxLines);
         let effOverlap = Math.max(0, Math.min(overlap, effMax - 1));
