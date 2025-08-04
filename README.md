@@ -113,3 +113,7 @@ Aplikasi ini mendukung berbagai provider API. Anda perlu mengisi API key sesuai 
 ## Lisensi
 
 Project ini open-source dan tersedia di bawah MIT License.
+
+---
+
+**Last Updated**: January 2025
