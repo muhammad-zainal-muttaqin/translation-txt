@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Translation TXT - Multi-Provider LLM Translator</title>
-    <meta name="description" content="Aplikasi web untuk menerjemahkan file teks menggunakan berbagai LLM API provider. Mendukung OpenRouter, Cerebras, dan Google Gemini.">
+    <meta name="description" content="Web application for translating text files using various LLM API providers. Supports OpenRouter, Cerebras, and Google Gemini.">
     <meta name="keywords" content="translation, LLM, AI, text translator, openrouter, cerebras, gemini, file translator">
     <meta name="author" content="Translation TXT">
     <meta name="robots" content="index, follow">
@@ -12,13 +12,13 @@
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website">
     <meta property="og:title" content="Translation TXT - Multi-Provider LLM Translator">
-    <meta property="og:description" content="Terjemahkan file teks dengan berbagai LLM API provider">
+    <meta property="og:description" content="Translate text files with various LLM API providers">
     <meta property="og:image" content="https://via.placeholder.com/1200x630/6366f1/ffffff?text=Translation+TXT">
     
     <!-- Twitter -->
     <meta property="twitter:card" content="summary_large_image">
     <meta property="twitter:title" content="Translation TXT - Multi-Provider LLM Translator">
-    <meta property="twitter:description" content="Terjemahkan file teks dengan berbagai LLM API provider">
+    <meta property="twitter:description" content="Translate text files with various LLM API providers">
     <meta property="twitter:image" content="https://via.placeholder.com/1200x630/6366f1/ffffff?text=Translation+TXT">
     
     <!-- Favicon -->
@@ -43,101 +43,102 @@
     </header>
     <main>
         <section>
-            <h2>📂 Unggah File</h2>
-            <div id="drag-drop-area" class="drag-drop-area">Seret & letakkan file di sini atau klik untuk memilih</div>
+            <h2>📂 Upload File</h2>
+            <div id="drag-drop-area" class="drag-drop-area">Drag & drop file here or click to select</div>
             <input type="file" id="file-input" accept=".txt,.csv,.md,.json,.log,.srt,.vtt,.xml,.yaml,.yml">
             <div id="file-info" style="display:none;">
-                <p>Nama File: <span id="file-name"></span></p>
-                <p>Ukuran: <span id="file-size"></span></p>
-                <p>Jumlah Baris: <span id="line-count"></span></p>
+                <p>File Name: <span id="file-name"></span></p>
+                <p>Size: <span id="file-size"></span></p>
+                <p>Line Count: <span id="line-count"></span></p>
             </div>
-            <p style="color:#94a3b8;margin:8px 0 0">Mendukung berbagai format teks umum.</p>
+            <p style="color:#94a3b8;margin:8px 0 0">Supports various common text formats.</p>
         </section>
 
         <section>
-            <h2>⚙️ Pengaturan API</h2>
+            <h2>⚙️ API Settings</h2>
             <div class="api-settings">
-                <label for="api-provider">Penyedia API</label>
+                <label for="api-provider">API Provider</label>
                 <select id="api-provider">
                     <option value="openrouter">OpenRouter</option>
                     <option value="cerebras">Cerebras</option>
                     <option value="google">Google Gemini</option>
                 </select>
 
-                <label for="model-name-input">Nama Model</label>
-                <input type="text" id="model-name-input" placeholder="Contoh: qwen/qwen3-4b:free, llama-4-scout-17b-16e-instruct, gemini-2.5-flash-lite">
-                <small class="helper">Masukkan nama model sesuai provider yang dipilih.</small>
+                <label for="model-name-input">Model Name</label>
+                <input type="text" id="model-name-input" placeholder="Example: qwen/qwen3-4b:free, llama-4-scout-17b-16e-instruct, gemini-2.5-flash-lite">
+                <small class="helper">Enter model name according to selected provider.</small>
 
                 <label for="api-key-input">API Key</label>
-                <input type="password" id="api-key-input" placeholder="Masukkan API key Anda">
-                <small class="helper">Kunci disimpan lokal di browser Anda.</small>
+                <input type="password" id="api-key-input" placeholder="Enter your API key">
+                <small class="helper">Key is stored locally in your browser.</small>
 
                 <div class="inline-hint">
-                    <span class="hint">Tip: Pastikan nama model sesuai dengan provider yang dipilih.</span>
+                    <span class="hint">Tip: Make sure model name matches the selected provider.</span>
                 </div>
             </div>
         </section>
 
         <section>
-            <h2>🌐 Pengaturan Bahasa</h2>
-            <label for="source-language">Bahasa Sumber</label>
+            <h2>🌐 Language Settings</h2>
+            <label for="source-language">Source Language</label>
             <select id="source-language">
-                <option value="auto">Deteksi Otomatis</option>
-                <option value="en">Inggris</option>
-                <option value="id">Indonesia</option>
-                <option value="ja">Jepang</option>
-                <option value="es">Spanyol</option>
+                <option value="auto">Auto Detect</option>
+                <option value="en">English</option>
+                <option value="id">Indonesian</option>
+                <option value="ja">Japanese</option>
+                <option value="es">Spanish</option>
             </select>
 
-            <label for="target-language">Bahasa Tujuan</label>
+            <label for="target-language">Target Language</label>
             <select id="target-language">
-                <option value="id">Indonesia</option>
-                <option value="en">Inggris</option>
-                <option value="ja">Jepang</option>
-                <option value="es">Spanyol</option>
+                <option value="id">Indonesian</option>
+                <option value="en">English</option>
+                <option value="ja">Japanese</option>
+                <option value="es">Spanish</option>
             </select>
         </section>
 
         <section>
-            <h2>📝 Instruksi Khusus</h2>
-            <label for="custom-instruction-text">Gaya/konteks terjemahan (opsional)</label>
-            <textarea id="custom-instruction-text" placeholder="Contoh: Gunakan bahasa santai dan ringkas."></textarea>
+            <h2>📝 Custom Instructions</h2>
+            <label for="custom-instruction-text">Translation style/context (optional)</label>
+            <textarea id="custom-instruction-text" placeholder="Example: Use casual and concise language."></textarea>
             <div class="checkbox-row">
                 <input type="checkbox" id="use-default-instruction" checked>
-                <label for="use-default-instruction">Gunakan instruksi standar yang direkomendasikan</label>
+                <label for="use-default-instruction">Use recommended default instructions</label>
             </div>
         </section>
 
         <section>
-            <h2>✂️ Opsi Pemisahan</h2>
+            <h2>✂️ Splitting Options</h2>
             <div class="split-card">
                 <div class="toggle-row">
                     <input type="checkbox" id="auto-split-toggle" checked>
-                    <label for="auto-split-toggle">Pemisahan Otomatis (disarankan)</label>
+                    <label for="auto-split-toggle">Automatic Splitting (recommended)</label>
                 </div>
                 <div class="grid-2" id="manual-split-grid">
                     <div>
-                        <label for="max-lines-per-chunk">Maks. baris per chunk</label>
+                        <label for="max-lines-per-chunk">Max. lines per chunk</label>
                         <input type="number" id="max-lines-per-chunk" value="300" min="1">
                     </div>
                     <div>
-                        <label for="overlap-lines">Overlap baris antarchunk</label>
+                        <label for="overlap-lines">Overlap lines between chunks</label>
                         <input type="number" id="overlap-lines" value="0" min="0">
                     </div>
                 </div>
                 <div class="statistics">
-                    <p id="split-calculation">Menunggu file diunggah...</p>
+                    <p id="split-calculation">Waiting for file upload...</p>
                 </div>
             </div>
         </section>
 
         <section>
-            <h2>🚀 Kontrol</h2>
+            <h2>🚀 Controls</h2>
             <div class="btn-row">
-                <button id="start-translation">Mulai Terjemahkan</button>
-                <button id="pause-translation" disabled>Jeda</button>
-                <button id="resume-translation" disabled>Lanjut</button>
-                <button id="cancel-translation" disabled>Batalkan</button>
+                <button id="start-translation">Start Translation</button>
+                <button id="pause-translation" disabled>Pause</button>
+                <button id="resume-translation" disabled>Resume</button>
+                <button id="cancel-translation" disabled>Cancel</button>
+                <button id="clear-all" class="clear-btn">Clear All Progress</button>
             </div>
 
             <div class="progress-bar-container">
@@ -153,27 +154,27 @@
         </section>
 
         <section>
-            <h2>🧩 Hasil</h2>
+            <h2>🧩 Results</h2>
             <div class="split-view">
                 <div class="original-view">
-                    <h3>Teks Asli</h3>
+                    <h3>Original Text</h3>
                     <pre id="original-text-preview"></pre>
                 </div>
                 <div class="translated-view">
-                    <h3>Hasil Terjemahan</h3>
+                    <h3>Translation Result</h3>
                     <pre id="translated-text-preview"></pre>
                 </div>
             </div>
 
             <div class="download-options">
-                <button class="download-txt" id="download-single-txt">Unduh .txt</button>
-                <button class="download-zip" id="download-zip">Unduh .zip</button>
-                <button class="copy-clipboard" id="copy-to-clipboard">Salin ke Clipboard</button>
+                <button class="download-txt" id="download-single-txt">Download .txt</button>
+                <button class="download-zip" id="download-zip">Download .zip</button>
+                <button class="copy-clipboard" id="copy-to-clipboard">Copy to Clipboard</button>
             </div>
         </section>
 
         <footer>
-            Dibuat dengan ❤️ untuk produktivitas terjemahan teks.
+            Made with ❤️ for text translation productivity.
         </footer>
     </main>
 

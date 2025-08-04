@@ -1,118 +1,118 @@
 # Translation TXT - Multi-Provider LLM Translator
 
-Aplikasi web sederhana untuk menerjemahkan file teks (.txt) menggunakan berbagai LLM API provider. Aplikasi ini berfungsi sebagai platform universal yang memungkinkan pengguna memilih provider API dan model yang mereka inginkan.
+A simple web application for translating text files (.txt) using various LLM API providers. This application serves as a universal platform that allows users to choose their preferred API provider and model.
 
-## Struktur Project
+## Project Structure
 
-- `index.html`: File HTML utama untuk interface aplikasi web
-- `style.css`: Berisi CSS untuk styling interface pengguna
-- `script.js`: Berisi logika JavaScript untuk handling file, integrasi API, proses terjemahan, dan interaksi UI
-- `TODO.md`: Spesifikasi lengkap dan rencana pengembangan project
+- `index.html`: Main HTML file for the web application interface
+- `style.css`: Contains CSS for styling the user interface
+- `script.js`: Contains JavaScript logic for file handling, API integration, translation process, and UI interactions
+- `TODO.md`: Complete project specifications and development plans
 
-## Fitur yang Diimplementasi
+## Implemented Features
 
 ### 🔌 **Multi-Provider API Support**
-- **OpenRouter**: Mendukung berbagai model seperti qwen/qwen3-4b:free, meta-llama/llama-3.2-3b-instruct:free, dll
-- **Cerebras**: Mendukung model seperti llama-4-scout-17b-16e-instruct, qwen-3-32b, dll
-- **Google Gemini**: Mendukung model seperti gemini-2.5-flash-lite, gemini-1.5-pro, dll
+- **OpenRouter**: Supports various models like qwen/qwen3-4b:free, meta-llama/llama-3.2-3b-instruct:free, etc.
+- **Cerebras**: Supports models like llama-4-scout-17b-16e-instruct, qwen-3-32b, etc.
+- **Google Gemini**: Supports models like gemini-2.5-flash-lite, gemini-1.5-pro, etc.
 
-### 📁 **Interface Upload File**
-- Drag & drop atau pilih file `.txt`
-- Preview konten file dengan informasi detail (nama, ukuran, jumlah baris)
-- Mendukung berbagai format teks: .txt, .csv, .md, .json, .log, .srt, .vtt, .xml, .yaml, .yml
+### 📁 **File Upload Interface**
+- Drag & drop or select `.txt` files
+- File content preview with detailed information (name, size, line count)
+- Supports various text formats: .txt, .csv, .md, .json, .log, .srt, .vtt, .xml, .yaml, .yml
 
-### 🌐 **Konfigurasi Bahasa**
-- Dropdown untuk bahasa sumber dan tujuan
-- Opsi deteksi otomatis bahasa sumber
-- Mendukung: Indonesia, Inggris, Jepang, Spanyol
+### 🌐 **Language Configuration**
+- Dropdown for source and target languages
+- Auto-detect source language option
+- Supports: Indonesian, English, Japanese, Spanish
 
-### ⚙️ **Pengaturan API Fleksibel**
-- **User-defined Model Names**: Pengguna mengisi sendiri nama model sesuai provider
-- **API Key Management**: Penyimpanan lokal per provider
-- **Persistent Settings**: Preferensi tersimpan di localStorage
+### ⚙️ **Flexible API Settings**
+- **User-defined Model Names**: Users input their own model names according to provider
+- **API Key Management**: Local storage per provider
+- **Persistent Settings**: Preferences saved in localStorage
 
-### 📝 **Instruksi Kustom**
-- Opsi menggunakan instruksi standar atau kustom
-- Placeholder dengan contoh instruksi yang user-friendly
+### 📝 **Custom Instructions**
+- Option to use standard or custom instructions
+- User-friendly placeholder with example instructions
 
-### ✂️ **Konfigurasi Pemisahan File**
-- **Pemisahan Otomatis**: Target ~300 baris per chunk (default)
-- **Pemisahan Manual**: Konfigurasi maksimal baris per chunk dan overlap
-- **Kalkulasi Real-time**: Estimasi jumlah chunk yang akan dibuat
+### ✂️ **File Splitting Configuration**
+- **Automatic Splitting**: Target ~300 lines per chunk (default)
+- **Manual Splitting**: Configure maximum lines per chunk and overlap
+- **Real-time Calculation**: Estimate number of chunks to be created
 
-### 🚀 **Proses Terjemahan**
-- Progress bar dengan informasi real-time
-- Log panel untuk monitoring proses
-- Kontrol: Mulai, Jeda, Lanjut, Batalkan
+### 🚀 **Translation Process**
+- Progress bar with real-time information
+- Log panel for process monitoring
+- Controls: Start, Pause, Resume, Cancel
 
-### 📊 **Manajemen Hasil**
-- Preview side-by-side (teks asli vs terjemahan)
-- Download sebagai file .txt tunggal
-- Copy ke clipboard
-- (Fitur ZIP dalam pengembangan)
+### 📊 **Results Management**
+- Side-by-side preview (original vs translation)
+- Download as single .txt file
+- Copy to clipboard
+- (ZIP feature in development)
 
-### 🛡️ **Error Handling yang Robust**
-- Pesan error yang user-friendly
-- Penanganan error API yang spesifik:
-  - `PROHIBITED_CONTENT` dari Google Gemini
-  - Validasi input yang komprehensif
+### 🛡️ **Robust Error Handling**
+- User-friendly error messages
+- Specific API error handling:
+  - `PROHIBITED_CONTENT` from Google Gemini
+  - Comprehensive input validation
   - Network error handling
 
-## Setup dan Menjalankan
+## Setup and Running
 
-Untuk menjalankan project ini secara lokal, ikuti langkah-langkah berikut:
+To run this project locally, follow these steps:
 
-### 1. **Clone repository atau download file project**
+### 1. **Clone repository or download project files**
 
-### 2. **Buka `index.html` di browser web**
+### 2. **Open `index.html` in web browser**
 
-Karena ini adalah aplikasi client-side, Anda bisa langsung membuka file `index.html` di browser. Tidak diperlukan web server untuk fungsionalitas dasar.
+Since this is a client-side application, you can directly open the `index.html` file in your browser. No web server is required for basic functionality.
 
-### 3. **Konfigurasi API Key (Penting)**
+### 3. **API Key Configuration (Important)**
 
-Aplikasi ini mendukung berbagai provider API. Anda perlu mengisi API key sesuai provider yang dipilih:
+This application supports various API providers. You need to fill in the API key according to your chosen provider:
 
-1. **Pilih Provider**: OpenRouter, Cerebras, atau Google Gemini
-2. **Masukkan Nama Model**: Sesuai dengan provider yang dipilih
-3. **Masukkan API Key**: Kunci akan disimpan lokal di browser
+1. **Select Provider**: OpenRouter, Cerebras, or Google Gemini
+2. **Enter Model Name**: According to your chosen provider
+3. **Enter API Key**: Key will be stored locally in browser
 
-**Contoh Konfigurasi:**
-- **OpenRouter**: Model `qwen/qwen3-4b:free`, API key dari OpenRouter
-- **Cerebras**: Model `llama-4-scout-17b-16e-instruct`, API key dari Cerebras
-- **Google Gemini**: Model `gemini-2.5-flash-lite`, API key dari Google AI Studio
+**Example Configuration:**
+- **OpenRouter**: Model `qwen/qwen3-4b:free`, API key from OpenRouter
+- **Cerebras**: Model `llama-4-scout-17b-16e-instruct`, API key from Cerebras
+- **Google Gemini**: Model `gemini-2.5-flash-lite`, API key from Google AI Studio
 
-**Catatan**: Untuk keamanan, API key disimpan lokal di browser pengguna. Setup ini untuk penggunaan lokal dan demonstrasi.
+**Note**: For security, API keys are stored locally in the user's browser. This setup is for local use and demonstration.
 
-## Cara Penggunaan
+## Usage
 
-1. **Upload File**: Drag and drop file `.txt` ke area yang ditentukan atau klik untuk memilih
-2. **Konfigurasi Provider**: Pilih provider API, masukkan nama model, dan API key
-3. **Pengaturan Bahasa**: Pilih bahasa sumber dan tujuan
-4. **Konfigurasi Pemisahan**: Atur opsi pemisahan file (otomatis/manual)
-5. **Mulai Terjemahan**: Klik tombol "Mulai Terjemahkan"
-6. **Lihat Hasil**: Setelah diterjemahkan, teks asli dan hasil terjemahan akan ditampilkan
-7. **Download/Salin**: Unduh file hasil atau salin ke clipboard
+1. **Upload File**: Drag and drop `.txt` file to designated area or click to select
+2. **Configure Provider**: Select API provider, enter model name, and API key
+3. **Language Settings**: Choose source and target languages
+4. **Splitting Configuration**: Adjust file splitting options (automatic/manual)
+5. **Start Translation**: Click "Start Translation" button
+6. **View Results**: After translation, original and translated texts will be displayed
+7. **Download/Copy**: Download result file or copy to clipboard
 
-## Pengaturan Default
+## Default Settings
 
-- **Pemisahan Otomatis**: Target ~300 baris per chunk
-- **Pemisahan Manual**: Default 300 baris per chunk
-- **Overlap**: 0 baris (dapat diatur manual)
-- **Instruksi**: Menggunakan instruksi standar (dapat dikustomisasi)
+- **Automatic Splitting**: Target ~300 lines per chunk
+- **Manual Splitting**: Default 300 lines per chunk
+- **Overlap**: 0 lines (can be adjusted manually)
+- **Instructions**: Uses standard instructions (can be customized)
 
-## Peningkatan Masa Depan (dari TODO.md)
+## Future Enhancements (from TODO.md)
 
-- **Batch Processing**: Upload dan proses multiple file sekaligus
-- **Translation History**: Riwayat terjemahan dengan localStorage
-- **Quality Control**: Confidence scoring dan manual review
-- **Performance Optimization**: Caching, kompresi, Web Workers
-- **Download ZIP**: Implementasi lengkap download sebagai .zip
-- **Pause/Resume**: Fitur jeda dan lanjut terjemahan
-- **Provider Tambahan**: Dukungan untuk provider API lainnya
+- **Batch Processing**: Upload and process multiple files simultaneously
+- **Translation History**: Translation history with localStorage
+- **Quality Control**: Confidence scoring and manual review
+- **Performance Optimization**: Caching, compression, Web Workers
+- **Download ZIP**: Complete implementation of download as .zip
+- **Pause/Resume**: Pause and resume translation functionality
+- **Additional Providers**: Support for other API providers
 
-## Lisensi
+## License
 
-Project ini open-source dan tersedia di bawah MIT License.
+This project is open-source and available under the MIT License.
 
 ---
 

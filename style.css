@@ -60,6 +60,8 @@ button.download-zip{background:linear-gradient(135deg, #ef4444, #dc2626)}
 button.download-zip:hover{filter:brightness(1.08)}
 button.copy-clipboard{background:linear-gradient(135deg, #0ea5e9, #0284c7)}
 button.copy-clipboard:hover{filter:brightness(1.08)}
+button.clear-btn{background:linear-gradient(135deg, #6b7280, #4b5563)}
+button.clear-btn:hover{filter:brightness(1.08)}
 
 .download-options,.statistics{margin-top:18px;padding-top:12px;border-top:1px dashed rgba(148,163,184,0.25)}
 .statistics p{margin:6px 0;color:#cbd5e1}

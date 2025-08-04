@@ -41,7 +41,8 @@ document.addEventListener('DOMContentLoaded', () => {
         actions: {
             downloadSingleBtn: document.getElementById('download-single-txt'),
             downloadZipBtn: document.getElementById('download-zip'),
-            copyToClipboardBtn: document.getElementById('copy-to-clipboard')
+            copyToClipboardBtn: document.getElementById('copy-to-clipboard'),
+            clearAllBtn: document.getElementById('clear-all')
         },
         stats: {
             linesSpan: document.getElementById('stats-lines'),
@@ -194,7 +195,7 @@ document.addEventListener('DOMContentLoaded', () => {
             elements.translation.stopBtn.addEventListener('click', stopTranslation);
         }
         if (elements.translation.pauseBtn) {
-            elements.translation.pauseBtn.addEventListener('click', () => log('Fitur jeda belum tersedia.'));
+            elements.translation.pauseBtn.addEventListener('click', () => log('Pause feature not available yet.'));
         }
 
         // File Splitting Events
@@ -214,6 +215,7 @@ document.addEventListener('DOMContentLoaded', () => {
         elements.actions.downloadSingleBtn.addEventListener('click', handleDownloadSingle);
         elements.actions.downloadZipBtn.addEventListener('click', handleDownloadZip);
         elements.actions.copyToClipboardBtn.addEventListener('click', handleCopyToClipboard);
+        elements.actions.clearAllBtn.addEventListener('click', handleClearAll);
     };
 
         const init = () => {
@@ -240,7 +242,7 @@ document.addEventListener('DOMContentLoaded', () => {
         elements.splitting.overlapInput.disabled = auto;
 
         if (!state.uploadedFileContent || state.uploadedFileContent.length === 0) {
-            elements.splitting.calculationPara.textContent = 'Belum ada file yang dimuat.';
+            elements.splitting.calculationPara.textContent = 'No file loaded yet.';
             return;
         }
         
@@ -254,7 +256,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const chunks = Math.max(1, Math.ceil((totalLines - effOverlap) / (effMax - effOverlap)));
-        elements.splitting.calculationPara.textContent = `Perkiraan: ${chunks} chunk • Maks ${effMax} baris/chunk • Overlap ${effOverlap}`;
+        elements.splitting.calculationPara.textContent = `Estimate: ${chunks} chunks • Max ${effMax} lines/chunk • Overlap ${effOverlap}`;
     };
 
     const splitFileContent = (text) => {
@@ -369,42 +371,42 @@ document.addEventListener('DOMContentLoaded', () => {
         const provider = elements.api.providerSelect.value;
         const apiKey = state.api.key;
         const modelName = state.api.modelName;
-        if (!apiKey) throw new Error('API key belum diisi.');
-        if (!modelName || modelName.trim() === '') throw new Error('Nama model belum diisi.');
+        if (!apiKey) throw new Error('API key not filled.');
+        if (!modelName || modelName.trim() === '') throw new Error('Model name not filled.');
 
         // Build prompt
-        const prompt = `${instruction}\n\nSumber (${sourceLang}) -> Tujuan (${targetLang}):\n\n${chunk}`;
+        const prompt = `${instruction}\n\nSource (${sourceLang}) -> Target (${targetLang}):\n\n${chunk}`;
 
         if (provider === 'google') {
             const data = await callGoogle(apiKey, modelName, prompt);
             if (data && data.promptFeedback && data.promptFeedback.blockReason) {
                 if (data.promptFeedback.blockReason === 'PROHIBITED_CONTENT') {
-                    throw new Error('Terjemahan gagal: Konten mungkin melanggar kebijakan penggunaan. Silakan coba dengan teks yang berbeda.');
+                    throw new Error('Translation failed: Content may violate usage policy. Please try with different text.');
                 }
             }
             const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (!text) throw new Error('Terjemahan gagal: Respon dari API tidak valid atau tidak lengkap.');
+            if (!text) throw new Error('Translation failed: API response is invalid or incomplete.');
             return text;
         }
         if (provider === 'openrouter') {
             const data = await callOpenRouter(apiKey, modelName, prompt);
             const text = data?.choices?.[0]?.message?.content;
-            if (!text) throw new Error('Terjemahan gagal: Respon dari API tidak valid atau tidak lengkap.');
+            if (!text) throw new Error('Translation failed: API response is invalid or incomplete.');
             return text;
         }
         if (provider === 'cerebras') {
             const data = await callCerebras(apiKey, modelName, prompt);
             const text = data?.choices?.[0]?.message?.content;
-            if (!text) throw new Error('Terjemahan gagal: Respon dari API tidak valid atau tidak lengkap.');
+            if (!text) throw new Error('Translation failed: API response is invalid or incomplete.');
             return text;
         }
-        throw new Error('Provider tidak dikenal.');
+        throw new Error('Unknown provider.');
     };
 
     const startTranslation = async () => {
         errorHandling.hide();
         if (!state.uploadedFileContent) {
-            errorHandling.show('Silakan unggah file .txt terlebih dahulu.');
+            errorHandling.show('Please upload a .txt file first.');
             return;
         }
         const sourceLang = elements.api.sourceLanguageSelect.value;
@@ -417,7 +419,7 @@ document.addEventListener('DOMContentLoaded', () => {
         state.translationAborted = false;
         elements.translation.startBtn.disabled = true;
         elements.translation.stopBtn.disabled = false;
-        log('Memulai proses terjemahan...');
+        log('Starting translation process...');
 
         const originalChunks = splitFileContent(state.uploadedFileContent);
         state.originalChunks = originalChunks;
@@ -430,7 +432,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 break;
             }
             const chunk = originalChunks[i];
-            log(`Menterjemahkan chunk ${i + 1}/${originalChunks.length}...`);
+            log(`Translating chunk ${i + 1}/${originalChunks.length}...`);
             try {
                 const translated = await translateChunk(chunk, sourceLang, targetLang, instruction);
                 state.translatedChunks[i] = translated;
@@ -438,8 +440,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 elements.preview.translatedText.textContent = translated;
                 updateProgress(i + 1, originalChunks.length);
             } catch (err) {
-                errorHandling.show(err.message || 'Terjadi kesalahan saat menerjemahkan.');
-                log(`Error pada chunk ${i + 1}: ${err.message || err}`);
+                errorHandling.show(err.message || 'An error occurred during translation.');
+                log(`Error on chunk ${i + 1}: ${err.message || err}`);
                 break;
             }
         }
@@ -448,9 +450,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (anyTranslated) {
             const merged = mergeChunks(state.translatedChunks.filter(Boolean));
             elements.preview.translatedText.textContent = merged;
-            log('Terjemahan selesai.');
+            log('Translation completed.');
         } else {
-            log('Tidak ada hasil terjemahan yang dapat ditampilkan.');
+            log('No translation results to display.');
         }
         elements.translation.startBtn.disabled = false;
         elements.translation.stopBtn.disabled = true;
@@ -460,13 +462,13 @@ document.addEventListener('DOMContentLoaded', () => {
         state.translationAborted = true;
         elements.translation.startBtn.disabled = false;
         elements.translation.stopBtn.disabled = true;
-        log('Proses terjemahan diminta berhenti.');
+        log('Translation process requested to stop.');
     };
 
     const handleDownloadSingle = () => {
         const content = elements.preview.translatedText.textContent || '';
         if (!content) {
-            errorHandling.show('Belum ada hasil untuk diunduh.');
+            errorHandling.show('No results to download.');
             return;
         }
         const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
@@ -478,25 +480,64 @@ document.addEventListener('DOMContentLoaded', () => {
         a.click();
         a.remove();
         URL.revokeObjectURL(url);
-        log('Hasil terjemahan diunduh sebagai translated.txt');
+        log('Translation result downloaded as translated.txt');
     };
 
     const handleDownloadZip = async () => {
-        errorHandling.show('Fitur ZIP belum diimplementasikan pada versi ini.');
+        errorHandling.show('ZIP feature not implemented in this version.');
         setTimeout(() => errorHandling.hide(), 3000);
     };
 
     const handleCopyToClipboard = async () => {
         const content = elements.preview.translatedText.textContent || '';
         if (!content) {
-            errorHandling.show('Belum ada hasil untuk disalin.');
+            errorHandling.show('No results to copy.');
             return;
         }
         try {
             await navigator.clipboard.writeText(content);
-            log('Hasil terjemahan disalin ke clipboard.');
+            log('Translation result copied to clipboard.');
         } catch (e) {
-            errorHandling.show('Gagal menyalin ke clipboard.');
+            errorHandling.show('Failed to copy to clipboard.');
+        }
+    };
+
+    const handleClearAll = () => {
+        if (confirm('Are you sure you want to clear all progress? Uploaded file and translation results will be deleted.')) {
+            // Reset state
+            state.uploadedFileContent = '';
+            state.translatedChunks = [];
+            state.originalChunks = [];
+            state.translationAborted = false;
+
+            // Reset file info
+            elements.file.info.style.display = 'none';
+            elements.file.nameSpan.textContent = '';
+            elements.file.sizeSpan.textContent = '';
+            elements.file.lineCountSpan.textContent = '';
+
+            // Reset file input
+            elements.file.input.value = '';
+
+            // Reset progress
+            updateProgress(0, 1);
+            elements.translation.startBtn.disabled = false;
+            elements.translation.stopBtn.disabled = true;
+
+            // Reset preview
+            elements.preview.originalText.textContent = '';
+            elements.preview.translatedText.textContent = '';
+
+            // Reset split calculation
+            updateSplitCalculation();
+
+            // Clear log
+            elements.translation.logContent.textContent = '';
+
+            // Hide error message
+            errorHandling.hide();
+
+            log('All progress cleared. Ready for new file.');
         }
     };
 
