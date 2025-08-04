@@ -189,7 +189,7 @@
     
     <!-- Service Worker Registration -->
     <script>
-        if ('serviceWorker' in navigator) {
+        if ('serviceWorker' in navigator && window.location.protocol === 'https:') {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('/sw.js')
                     .then((registration) => {
@@ -199,6 +199,8 @@
                         console.log('SW registration failed: ', registrationError);
                     });
             });
+        } else {
+            console.log('Service Worker not supported or not HTTPS');
         }
         
         // Hide loading overlay when page is ready

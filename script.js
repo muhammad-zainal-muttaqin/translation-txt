@@ -7,9 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
             info: document.getElementById('file-info'),
             nameSpan: document.getElementById('file-name'),
             sizeSpan: document.getElementById('file-size'),
-            lineCountSpan: document.getElementById('line-count'),
-            preview: document.getElementById('file-preview'),
-            previewContent: document.getElementById('preview-content')
+            lineCountSpan: document.getElementById('line-count')
         },
         api: {
             providerSelect: document.getElementById('api-provider'),
@@ -107,7 +105,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     state.api.endpoint = 'https://generativelanguage.googleapis.com/v1beta/models/';
                     break;
             }
-            // Load saved model name and API key for this provider
             const savedModelName = localStorage.getItem(`${provider}_model_name`);
             if (savedModelName) {
                 elements.api.modelNameInput.value = savedModelName;
@@ -136,11 +133,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 elements.file.lineCountSpan.textContent = lineCount;
                 elements.file.info.style.display = 'block';
 
-                elements.file.previewContent.textContent = state.uploadedFileContent.substring(0, 2000) + 
-                    (state.uploadedFileContent.length > 2000 ? '...' : '');
-                elements.file.preview.style.display = 'block';
-
-                // Force update split calculation after file is loaded
+                // Update split calculation after file is loaded
                 setTimeout(() => {
                     updateSplitCalculation();
                     log(`File loaded: ${file.name} (${lineCount} lines)`);
@@ -223,7 +216,6 @@ document.addEventListener('DOMContentLoaded', () => {
         elements.actions.copyToClipboardBtn.addEventListener('click', handleCopyToClipboard);
     };
 
-    // Initialize the application
         const init = () => {
             setupEventListeners();
             const initialProvider = elements.api.providerSelect.value;
@@ -232,7 +224,6 @@ document.addEventListener('DOMContentLoaded', () => {
             updateSplitCalculation();
         };
 
-    // Utility log function
     const log = (msg) => {
         const time = new Date().toLocaleTimeString();
         elements.translation.logContent.textContent += `[${time}] ${msg}\n`;
@@ -248,19 +239,16 @@ document.addEventListener('DOMContentLoaded', () => {
         elements.splitting.maxLinesInput.disabled = auto;
         elements.splitting.overlapInput.disabled = auto;
 
-        if (!state.uploadedFileContent) {
+        if (!state.uploadedFileContent || state.uploadedFileContent.length === 0) {
             elements.splitting.calculationPara.textContent = 'Belum ada file yang dimuat.';
             return;
         }
         
-        // Debug: log file content status
-        console.log('updateSplitCalculation called, file content length:', state.uploadedFileContent.length);
         const totalLines = state.uploadedFileContent.split('\n').length;
         let effMax = Math.max(1, maxLines);
         let effOverlap = Math.max(0, Math.min(overlap, effMax - 1));
 
         if (auto) {
-            // Heuristik sederhana: target ~300 baris per chunk
             effMax = Math.min(500, Math.max(50, Math.ceil(totalLines / Math.max(1, Math.ceil(totalLines / 300)))));
             effOverlap = Math.min(5, Math.max(0, Math.floor(effMax * 0.05)));
         }
@@ -269,7 +257,6 @@ document.addEventListener('DOMContentLoaded', () => {
         elements.splitting.calculationPara.textContent = `Perkiraan: ${chunks} chunk • Maks ${effMax} baris/chunk • Overlap ${effOverlap}`;
     };
 
-    // Split file content into chunks
     const splitFileContent = (text) => {
         const auto = elements.splitting.autoToggle.checked;
         let maxLines = parseInt(elements.splitting.maxLinesInput.value || '300', 10);
@@ -298,10 +285,8 @@ document.addEventListener('DOMContentLoaded', () => {
         return chunks;
     };
 
-    // Merge translated chunks
     const mergeChunks = (chunks) => chunks.join('\n');
 
-    // Update progress bar and text
     const updateProgress = (done, total) => {
         const pct = total > 0 ? Math.round((done / total) * 100) : 0;
         elements.translation.progressBar.style.width = `${pct}%`;
@@ -309,7 +294,6 @@ document.addEventListener('DOMContentLoaded', () => {
         elements.translation.progressBar.setAttribute('aria-valuenow', String(pct));
     };
 
-    // Provider request helpers
     const callGoogle = async (apiKey, modelName, content) => {
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelName)}:generateContent?key=${encodeURIComponent(apiKey)}`;
         const body = {
@@ -381,7 +365,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return res.json();
     };
 
-    // Translate one chunk according to provider
     const translateChunk = async (chunk, sourceLang, targetLang, instruction) => {
         const provider = elements.api.providerSelect.value;
         const apiKey = state.api.key;
@@ -418,7 +401,6 @@ document.addEventListener('DOMContentLoaded', () => {
         throw new Error('Provider tidak dikenal.');
     };
 
-    // Start translation flow
     const startTranslation = async () => {
         errorHandling.hide();
         if (!state.uploadedFileContent) {
@@ -458,7 +440,6 @@ document.addEventListener('DOMContentLoaded', () => {
             } catch (err) {
                 errorHandling.show(err.message || 'Terjadi kesalahan saat menerjemahkan.');
                 log(`Error pada chunk ${i + 1}: ${err.message || err}`);
-                // hentikan proses pada error agar UX jelas
                 break;
             }
         }
@@ -482,7 +463,6 @@ document.addEventListener('DOMContentLoaded', () => {
         log('Proses terjemahan diminta berhenti.');
     };
 
-    // Download single .txt of translated result
     const handleDownloadSingle = () => {
         const content = elements.preview.translatedText.textContent || '';
         if (!content) {
@@ -501,13 +481,11 @@ document.addEventListener('DOMContentLoaded', () => {
         log('Hasil terjemahan diunduh sebagai translated.txt');
     };
 
-    // Download zip of original + translated per chunk
     const handleDownloadZip = async () => {
         errorHandling.show('Fitur ZIP belum diimplementasikan pada versi ini.');
         setTimeout(() => errorHandling.hide(), 3000);
     };
 
-    // Copy to clipboard
     const handleCopyToClipboard = async () => {
         const content = elements.preview.translatedText.textContent || '';
         if (!content) {
