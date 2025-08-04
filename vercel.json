@@ -34,17 +34,5 @@
         }
       ]
     }
-  ],
-  "rewrites": [
-    {
-      "source": "/sw.js",
-      "destination": "/sw.js"
-    }
-  ],
-  "functions": {},
-  "build": {
-    "env": {
-      "NODE_ENV": "production"
-    }
-  }
+  ]
 } 
