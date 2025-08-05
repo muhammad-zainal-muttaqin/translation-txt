@@ -508,6 +508,8 @@ footer {
     color: #94a3b8;
     font-size: .92rem;
     border-top: 1px solid var(--elev-1);
+    border-top-left-radius: 16px;
+    border-top-right-radius: 16px;
     background: linear-gradient(135deg, rgba(15,23,42,0.45), rgba(2,6,23,0.35));
     backdrop-filter: saturate(130%) blur(10px);
     -webkit-backdrop-filter: saturate(130%) blur(10px);
