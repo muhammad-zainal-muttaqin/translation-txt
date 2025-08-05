@@ -242,13 +242,14 @@ document.addEventListener('DOMContentLoaded', () => {
         elements.actions.clearAllBtn.addEventListener('click', handleClearAll);
     };
 
-        const init = () => {
-            setupEventListeners();
-            const initialProvider = elements.api.providerSelect.value;
-            apiManagement.setConfig(initialProvider);
-            elements.instruction.useDefaultCheckbox.dispatchEvent(new Event('change'));
-            updateSplitCalculation();
-        };
+            const init = () => {
+        setupEventListeners();
+        setupSmoothScrolling();
+        const initialProvider = elements.api.providerSelect.value;
+        apiManagement.setConfig(initialProvider);
+        elements.instruction.useDefaultCheckbox.dispatchEvent(new Event('change'));
+        updateSplitCalculation();
+    };
 
     const log = (msg) => {
         const time = new Date().toLocaleTimeString();
@@ -321,6 +322,79 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         return languageMap[languageCode];
+    };
+
+    // Enhanced Smooth Scrolling System
+    const setupSmoothScrolling = () => {
+        // Easing function for smooth animation
+        const easeOutCubic = t => --t * t * t + 1;
+        
+        // Smooth scroll to element or position
+        const smoothScrollTo = (target, duration = 600) => {
+            const startY = window.scrollY;
+            const targetY = typeof target === 'number' ? target : target.offsetTop;
+            const difference = targetY - startY;
+            const startTime = performance.now();
+
+            if (difference === 0) return;
+
+            const step = () => {
+                const progress = (performance.now() - startTime) / duration;
+                const amount = easeOutCubic(Math.min(progress, 1));
+                window.scrollTo({ 
+                    top: startY + amount * difference,
+                    behavior: 'auto' // Use auto for better performance
+                });
+                
+                if (progress < 0.99) {
+                    requestAnimationFrame(step);
+                }
+            };
+            
+            requestAnimationFrame(step);
+        };
+
+        // Enhanced scroll performance for all scrollable elements
+        const enhanceScrollPerformance = () => {
+            const scrollableElements = document.querySelectorAll('main, .split-view, #log-content, .original-view pre, .translated-view pre');
+            
+            scrollableElements.forEach(element => {
+                // Add hardware acceleration
+                element.style.transform = 'translateZ(0)';
+                element.style.willChange = 'scroll-position';
+                
+                // Smooth scroll for internal elements
+                element.addEventListener('wheel', (e) => {
+                    if (element.scrollHeight > element.clientHeight) {
+                        e.preventDefault();
+                        const delta = e.deltaY;
+                        const scrollStep = Math.abs(delta) > 50 ? delta * 0.5 : delta;
+                        
+                        element.scrollTop += scrollStep;
+                    }
+                }, { passive: false });
+            });
+        };
+
+        // Initialize enhanced scrolling
+        enhanceScrollPerformance();
+        
+        // Add smooth scroll to anchor links
+        document.addEventListener('click', (e) => {
+            const target = e.target.closest('a[href^="#"]');
+            if (target) {
+                e.preventDefault();
+                const element = document.querySelector(target.getAttribute('href'));
+                if (element) {
+                    smoothScrollTo(element, 800);
+                }
+            }
+        });
+
+        // Optimize scroll performance on mobile
+        if ('ontouchstart' in window) {
+            document.body.style.webkitOverflowScrolling = 'touch';
+        }
     };
 
     // Update split calculation text and enforce UI states

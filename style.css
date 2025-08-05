@@ -55,8 +55,15 @@ body {
     margin: 0;
     padding: 0;
     color: var(--text);
-    scroll-behavior: smooth;
     background: var(--bg);
+    /* Enhanced smooth scrolling */
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: smooth;
+    /* Optimize for performance */
+    will-change: scroll-position;
+    transform: translateZ(0);
+    backface-visibility: hidden;
 }
 
 /* Header */
@@ -94,6 +101,10 @@ main {
     border-radius: 16px;
     box-shadow: 0 12px 32px rgba(0,0,0,0.22);
     min-height: calc(100vh - 140px);
+    /* Enhanced scroll performance */
+    transform: translateZ(0);
+    will-change: scroll-position;
+    -webkit-overflow-scrolling: touch;
 }
 
 /* Section cards */
@@ -428,6 +439,10 @@ button.copy-clipboard:active:not(:disabled) {
     padding: 12px;
     border-radius: 10px;
     color: #cbd5e1;
+    /* Enhanced scroll performance */
+    transform: translateZ(0);
+    will-change: scroll-position;
+    -webkit-overflow-scrolling: touch;
 }
 
 /* Split views */
@@ -466,6 +481,10 @@ button.copy-clipboard:active:not(:disabled) {
     padding: 12px;
     border-radius: 10px;
     color: #e5e7eb;
+    /* Enhanced scroll performance */
+    transform: translateZ(0);
+    will-change: scroll-position;
+    -webkit-overflow-scrolling: touch;
 }
 
 .download-options, .statistics {
