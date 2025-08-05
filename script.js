@@ -734,9 +734,17 @@ OUTPUT: Return the exact same structure with only the translatable text converte
         }
 
         try {
-            // Import JSZip dynamically
-            const JSZip = await import('https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js');
-            const zip = new JSZip.default();
+            // Load JSZip from CDN if not already loaded
+            if (typeof JSZip === 'undefined') {
+                await new Promise((resolve, reject) => {
+                    const script = document.createElement('script');
+                    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+                    script.onload = resolve;
+                    script.onerror = reject;
+                    document.head.appendChild(script);
+                });
+            }
+            const zip = new JSZip();
 
             // Add original file
             const originalFileName = state.uploadedFileName || 'original.txt';
