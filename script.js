@@ -245,7 +245,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const init = () => {
         setupEventListeners();
         setupSmoothScrolling();
-        setupSmartHeaderFooter();
         const initialProvider = elements.api.providerSelect.value;
         apiManagement.setConfig(initialProvider);
         elements.instruction.useDefaultCheckbox.dispatchEvent(new Event('change'));
@@ -396,66 +395,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if ('ontouchstart' in window) {
             document.body.style.webkitOverflowScrolling = 'touch';
         }
-    };
-
-    // Smart Header and Footer with dynamic width
-    const setupSmartHeaderFooter = () => {
-        const header = document.querySelector('header');
-        const footer = document.querySelector('footer');
-        let ticking = false;
-        let lastScrollTop = 0;
-
-        const updateHeaderFooterState = () => {
-            const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-            const windowHeight = window.innerHeight;
-            const documentHeight = document.documentElement.scrollHeight;
-            
-            // Header logic - show/hide based on scroll direction
-            const scrollDelta = scrollTop - lastScrollTop;
-            const isScrollingUp = scrollDelta < 0;
-            const isScrollingDown = scrollDelta > 0;
-            
-            // Show header when scrolling up (even slightly)
-            if (isScrollingUp && scrollTop > 100) {
-                header.classList.add('visible');
-            }
-            // Hide header when scrolling down
-            else if (isScrollingDown && scrollTop > 100) {
-                header.classList.remove('visible');
-            }
-            // Always show header at top
-            else if (scrollTop <= 100) {
-                header.classList.add('visible');
-                header.classList.add('at-top');
-            } else {
-                header.classList.remove('at-top');
-            }
-            
-            // Footer logic - full width at bottom
-            const isNearBottom = (scrollTop + windowHeight) >= (documentHeight - 50);
-            
-            if (isNearBottom) {
-                footer.classList.add('at-bottom');
-            } else {
-                footer.classList.remove('at-bottom');
-            }
-            
-            lastScrollTop = scrollTop;
-            ticking = false;
-        };
-
-        const requestTick = () => {
-            if (!ticking) {
-                requestAnimationFrame(updateHeaderFooterState);
-                ticking = true;
-            }
-        };
-
-        // Listen for scroll events
-        window.addEventListener('scroll', requestTick, { passive: true });
-        
-        // Initial check
-        updateHeaderFooterState();
     };
 
     // Update split calculation text and enforce UI states

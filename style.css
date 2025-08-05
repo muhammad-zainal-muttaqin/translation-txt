@@ -68,10 +68,8 @@ body {
 
 /* Header */
 header {
-    position: fixed;
+    position: sticky;
     top: 0;
-    left: 0;
-    right: 0;
     z-index: 60;
     display: flex;
     align-items: center;
@@ -82,30 +80,6 @@ header {
     backdrop-filter: saturate(130%) blur(10px);
     -webkit-backdrop-filter: saturate(130%) blur(10px);
     box-shadow: 0 8px 24px rgba(0,0,0,0.18);
-    /* Smart header transitions */
-    max-width: 1200px;
-    margin-left: auto;
-    margin-right: auto;
-    border-radius: 0 0 16px 16px;
-    transform: translateY(-100%);
-    opacity: 0;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-/* Header when visible */
-header.visible {
-    transform: translateY(0);
-    opacity: 1;
-}
-
-/* Header when scrolled to top */
-header.at-top {
-    width: 100vw;
-    margin-left: calc(-50vw + 50%);
-    margin-right: calc(-50vw + 50%);
-    border-radius: 0;
-    padding-left: calc(50vw - 50% + 18px);
-    padding-right: calc(50vw - 50% + 18px);
 }
 
 header h1 {
@@ -131,8 +105,6 @@ main {
     transform: translateZ(0);
     will-change: scroll-position;
     -webkit-overflow-scrolling: touch;
-    /* Compensate for fixed header */
-    margin-top: 80px;
 }
 
 /* Section cards */
@@ -540,22 +512,6 @@ footer {
     backdrop-filter: saturate(130%) blur(10px);
     -webkit-backdrop-filter: saturate(130%) blur(10px);
     box-shadow: 0 -8px 24px rgba(0,0,0,0.18);
-    /* Smart width transitions - match main container width */
-    max-width: 1200px;
-    margin-left: auto;
-    margin-right: auto;
-    border-radius: 16px;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-/* Footer when scrolled to bottom */
-footer.at-bottom {
-    width: 100vw;
-    margin-left: calc(-50vw + 50%);
-    margin-right: calc(-50vw + 50%);
-    border-radius: 0;
-    padding-left: calc(50vw - 50% + 18px);
-    padding-right: calc(50vw - 50% + 18px);
 }
 
 .footer-content {
@@ -630,26 +586,6 @@ footer.at-bottom {
         font-size: 1.2rem;
     }
     
-    /* Mobile header adjustments */
-    header {
-        max-width: calc(100% - 28px);
-        margin-left: 14px;
-        margin-right: 14px;
-    }
-    
-    header.at-top {
-        width: 100vw;
-        margin-left: calc(-50vw + 50%);
-        margin-right: calc(-50vw + 50%);
-        padding-left: calc(50vw - 50% + 14px);
-        padding-right: calc(50vw - 50% + 14px);
-    }
-    
-    /* Mobile main container adjustment */
-    main {
-        margin-top: 70px;
-    }
-    
     .footer-content {
         flex-direction: column;
         gap: 8px;
@@ -657,20 +593,5 @@ footer.at-bottom {
     
     .github-link {
         padding: 8px;
-    }
-    
-    /* Mobile footer adjustments */
-    footer {
-        max-width: calc(100% - 28px);
-        margin-left: 14px;
-        margin-right: 14px;
-    }
-    
-    footer.at-bottom {
-        width: 100vw;
-        margin-left: calc(-50vw + 50%);
-        margin-right: calc(-50vw + 50%);
-        padding-left: calc(50vw - 50% + 14px);
-        padding-right: calc(50vw - 50% + 14px);
     }
 }
