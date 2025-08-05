@@ -245,7 +245,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const init = () => {
         setupEventListeners();
         setupSmoothScrolling();
-        setupSmartFooter();
+        setupSmartHeaderFooter();
         const initialProvider = elements.api.providerSelect.value;
         apiManagement.setConfig(initialProvider);
         elements.instruction.useDefaultCheckbox.dispatchEvent(new Event('change'));
@@ -398,17 +398,40 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    // Smart Footer with dynamic width
-    const setupSmartFooter = () => {
+    // Smart Header and Footer with dynamic width
+    const setupSmartHeaderFooter = () => {
+        const header = document.querySelector('header');
         const footer = document.querySelector('footer');
         let ticking = false;
+        let lastScrollTop = 0;
 
-        const updateFooterState = () => {
+        const updateHeaderFooterState = () => {
             const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
             const windowHeight = window.innerHeight;
             const documentHeight = document.documentElement.scrollHeight;
             
-            // Check if we're near the bottom (within 50px)
+            // Header logic - show/hide based on scroll direction
+            const scrollDelta = scrollTop - lastScrollTop;
+            const isScrollingUp = scrollDelta < 0;
+            const isScrollingDown = scrollDelta > 0;
+            
+            // Show header when scrolling up (even slightly)
+            if (isScrollingUp && scrollTop > 100) {
+                header.classList.add('visible');
+            }
+            // Hide header when scrolling down
+            else if (isScrollingDown && scrollTop > 100) {
+                header.classList.remove('visible');
+            }
+            // Always show header at top
+            else if (scrollTop <= 100) {
+                header.classList.add('visible');
+                header.classList.add('at-top');
+            } else {
+                header.classList.remove('at-top');
+            }
+            
+            // Footer logic - full width at bottom
             const isNearBottom = (scrollTop + windowHeight) >= (documentHeight - 50);
             
             if (isNearBottom) {
@@ -417,12 +440,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 footer.classList.remove('at-bottom');
             }
             
+            lastScrollTop = scrollTop;
             ticking = false;
         };
 
         const requestTick = () => {
             if (!ticking) {
-                requestAnimationFrame(updateFooterState);
+                requestAnimationFrame(updateHeaderFooterState);
                 ticking = true;
             }
         };
@@ -431,7 +455,7 @@ document.addEventListener('DOMContentLoaded', () => {
         window.addEventListener('scroll', requestTick, { passive: true });
         
         // Initial check
-        updateFooterState();
+        updateHeaderFooterState();
     };
 
     // Update split calculation text and enforce UI states
