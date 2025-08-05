@@ -61,17 +61,17 @@ Based on Cerebras platform, here are the available models:
 **💡 Note**: Llama 3.1 models are temporarily limited to 8192 context in Free Tier
 
 ### 🌟 **Google Gemini Models**
-Google's latest AI models with advanced capabilities:
+Google's latest AI models with advanced capabilities - **Available for FREE**:
 
 | Model Name | Context | Capabilities | Pricing |
 |------------|---------|--------------|---------|
-| `gemini-2.5-pro` | 2M+ | Advanced reasoning, Code generation | 💰 Paid |
-| `gemini-2.5-flash` | 1M | Fast, efficient processing | 💰 Paid |
-| `gemini-2.5-flash-lite` | 1M | Lightweight, cost-effective | 💰 Paid |
-| `gemini-2.0-flash` | 1M | Balanced performance | 💰 Paid |
-| `gemini-2.0-flash-lite` | 1M | Lightweight version | 💰 Paid |
+| `gemini-2.5-pro` | 2M+ | Advanced reasoning, Code generation | ✅ Free |
+| `gemini-2.5-flash` | 1M | Fast, efficient processing | ✅ Free |
+| `gemini-2.5-flash-lite` | 1M | Lightweight, cost-effective | ✅ Free |
+| `gemini-2.0-flash` | 1M | Balanced performance | ✅ Free |
+| `gemini-2.0-flash-lite` | 1M | Lightweight version | ✅ Free |
 
-**💡 Note**: Gemini models require Google AI Studio API key
+**💡 Note**: Gemini models require Google AI Studio API key from [Google AI Studio](https://aistudio.google.com/u/0/apikey) - **FREE to use**
 
 ### 📁 **File Upload Interface**
 - Drag & drop or select `.txt` files
@@ -175,10 +175,11 @@ This application supports various API providers. You need to fill in the API key
 - Model: `llama-3.3-70b` (65,536 context, high quality)
 - API Key: Get from [Cerebras](https://cerebras.ai/)
 
-**Google Gemini (Advanced Features):**
-- Model: `gemini-2.5-flash-lite` (1M context, cost-effective)
-- Model: `gemini-2.5-pro` (2M+ context, best quality)
-- API Key: Get from [Google AI Studio](https://aistudio.google.com/)
+**Google Gemini (Advanced Features - FREE):**
+- Model: `gemini-2.5-flash-lite` (1M context, lightweight and fast)
+- Model: `gemini-2.5-pro` (2M+ context, best quality and reasoning)
+- Model: `gemini-2.5-flash` (1M context, balanced performance)
+- API Key: Get from [Google AI Studio](https://aistudio.google.com/u/0/apikey) - **FREE**
 
 **Note**: For security, API keys are stored locally in the user's browser. This setup is for local use and demonstration.
 
