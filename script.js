@@ -527,10 +527,22 @@ OUTPUT: Return the exact same structure with ALL text converted from ${sourceLan
         return basePrompt + specificRule + validationPrompt;
     };
 
-    const updateProgress = (done, total) => {
+    const updateProgress = (done, total, isProcessing = false) => {
         const pct = total > 0 ? Math.round((done / total) * 100) : 0;
         elements.translation.progressBar.style.width = `${pct}%`;
-        elements.translation.progressText.textContent = `${pct}%`;
+        
+        if (isProcessing) {
+            elements.translation.progressText.textContent = `${pct}% (Processing...)`;
+            elements.translation.progressBar.style.background = 'linear-gradient(90deg, #4CAF50, #FF9800, #4CAF50)';
+            elements.translation.progressBar.style.backgroundSize = '200% 100%';
+            elements.translation.progressBar.style.animation = 'progressPulse 2s infinite';
+        } else {
+            elements.translation.progressText.textContent = `${pct}%`;
+            elements.translation.progressBar.style.background = '';
+            elements.translation.progressBar.style.backgroundSize = '';
+            elements.translation.progressBar.style.animation = '';
+        }
+        
         elements.translation.progressBar.setAttribute('aria-valuenow', String(pct));
     };
 
@@ -714,16 +726,33 @@ OUTPUT: Return the exact same structure with ALL text converted from ${sourceLan
                 break;
             }
             const chunk = originalChunks[i];
+            const startTime = Date.now();
             log(`Translating chunk ${i + 1}/${originalChunks.length}...`);
+            
+            // Start streaming indicator
+            const streamingInterval = setInterval(() => {
+                const elapsed = Math.floor((Date.now() - startTime) / 1000);
+                log(`⏳ Chunk ${i + 1} still processing... (${elapsed}s elapsed)`);
+            }, 3000); // Update every 3 seconds
+            
             try {
+                // Show processing state
+                updateProgress(i, originalChunks.length, true);
+                
                 const translated = await translateChunk(chunk, sourceLang, targetLang, instruction);
+                clearInterval(streamingInterval);
+                
+                const totalTime = Math.floor((Date.now() - startTime) / 1000);
+                log(`✅ Chunk ${i + 1} completed in ${totalTime}s`);
+                
                 state.translatedChunks[i] = translated;
                 elements.preview.originalText.textContent = chunk;
                 elements.preview.translatedText.textContent = translated;
-                updateProgress(i + 1, originalChunks.length);
+                updateProgress(i + 1, originalChunks.length, false);
             } catch (err) {
+                clearInterval(streamingInterval);
                 errorHandling.show(err.message || 'An error occurred during translation.');
-                log(`Error on chunk ${i + 1}: ${err.message || err}`);
+                log(`❌ Error on chunk ${i + 1}: ${err.message || err}`);
                 break;
             }
         }
