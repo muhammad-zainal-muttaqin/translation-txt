@@ -15,9 +15,59 @@ A modern, feature-rich web application for translating text files using various 
 ## Implemented Features
 
 ### 🔌 **Multi-Provider API Support**
-- **OpenRouter**: Supports various models like qwen/qwen3-4b:free, meta-llama/llama-3.2-3b-instruct:free, etc.
-- **Cerebras**: Supports models like llama-4-scout-17b-16e-instruct, qwen-3-32b, etc.
-- **Google Gemini**: Supports models like gemini-2.5-flash-lite, gemini-1.5-pro, etc.
+- **OpenRouter**: Universal gateway to 100+ models from various providers
+- **Cerebras**: High-performance models with generous free tier
+- **Google Gemini**: Google's latest AI models with advanced capabilities
+
+## 📋 **Supported Models by Provider**
+
+### 🚀 **OpenRouter Models (Free Tier)**
+Based on [OpenRouter's model catalog](https://openrouter.ai/models), here are the recommended free models:
+
+| Model Name | Provider | Context | Specialization | Status |
+|------------|----------|---------|----------------|---------|
+| `horizon-beta` | openrouter | 256K | Programming, Science, Translation | ✅ Free |
+| `z-ai:glm-4-5-air` | z-ai | 131K | Agent-centric applications | ✅ Free |
+| `qwen:qwen3-coder` | qwen | 262K | Code generation, Tool use | ✅ Free |
+| `moonshotai:kimi-k2` | moonshotai | 33K | Reasoning, Code synthesis | ✅ Free |
+| `venice:uncensored` | cognitivecomputations | 33K | Unrestricted use cases | ✅ Free |
+| `google:gemma-3n-2b` | google | 8K | Multilingual, Reasoning | ✅ Free |
+| `tencent:hunyuan-a13b` | tencent | 33K | Mathematics, Science | ✅ Free |
+| `tng:deepseek-r1t2-chimera` | tngtech | 164K | Long-context analysis | ✅ Free |
+| `mistral:mistral-small-3-2-24b` | mistralai | 131K | Instruction following | ✅ Free |
+| `moonshotai:kimi-dev-72b` | moonshotai | 131K | Software engineering | ✅ Free |
+| `deepseek:deepseek-r1-0528-qwen3-8b` | deepseek | 131K | Math, Programming | ✅ Free |
+
+**💡 Tip**: For paid models and higher rate limits, visit [OpenRouter Models](https://openrouter.ai/models)
+
+### ⚡ **Cerebras Models (Free Tier)**
+Based on Cerebras platform, here are the available models:
+
+| Model Name | Context Length | Type | Rate Limits | Status |
+|------------|----------------|------|-------------|---------|
+| `qwen-3-235b-a22b-instruct-2507` | 64,000 | Requests: 30/min, 900/hour | ✅ Free |
+| `qwen-3-235b-a22b-thinking-2507` | 65,536 | Requests: 30/min, 900/hour | ✅ Free |
+| `qwen-3-coder-480b` | 65,536 | Requests: 10/min, 100/hour | ✅ Free |
+| `llama-3.3-70b` | 65,536 | Requests: 30/min, 900/hour | ✅ Free |
+| `qwen-3-32b` | 65,536 | Requests: 30/min, 900/hour | ✅ Free |
+| `llama3.1-8b` | 8,192 | Requests: 30/min, 900/hour | ✅ Free |
+| `llama-4-scout-17b-16e-instruct` | 8,192 | Requests: 30/min, 900/hour | ✅ Free |
+| `llama-4-maverick-17b-128e-instruct` | 8,192 | Requests: 30/min, 900/hour | ✅ Free |
+
+**💡 Note**: Llama 3.1 models are temporarily limited to 8192 context in Free Tier
+
+### 🌟 **Google Gemini Models**
+Google's latest AI models with advanced capabilities:
+
+| Model Name | Context | Capabilities | Pricing |
+|------------|---------|--------------|---------|
+| `gemini-2.5-pro` | 2M+ | Advanced reasoning, Code generation | 💰 Paid |
+| `gemini-2.5-flash` | 1M | Fast, efficient processing | 💰 Paid |
+| `gemini-2.5-flash-lite` | 1M | Lightweight, cost-effective | 💰 Paid |
+| `gemini-2.0-flash` | 1M | Balanced performance | 💰 Paid |
+| `gemini-2.0-flash-lite` | 1M | Lightweight version | 💰 Paid |
+
+**💡 Note**: Gemini models require Google AI Studio API key
 
 ### 📁 **File Upload Interface**
 - Drag & drop or select `.txt` files
@@ -108,9 +158,23 @@ This application supports various API providers. You need to fill in the API key
 3. **Enter API Key**: Key will be stored locally in browser
 
 **Example Configuration:**
-- **OpenRouter**: Model `qwen/qwen3-4b:free`, API key from OpenRouter
-- **Cerebras**: Model `llama-4-scout-17b-16e-instruct`, API key from Cerebras
-- **Google Gemini**: Model `gemini-2.5-flash-lite`, API key from Google AI Studio
+
+**OpenRouter (Recommended for Free Tier):**
+- Model: `horizon-beta` (256K context, great for translation)
+- Model: `qwen:qwen3-coder` (262K context, excellent for code files)
+- Model: `mistral:mistral-small-3-2-24b` (131K context, balanced performance)
+- API Key: Get from [OpenRouter](https://openrouter.ai/)
+
+**Cerebras (High Performance):**
+- Model: `qwen-3-32b` (65,536 context, fast and reliable)
+- Model: `llama-4-scout-17b-16e-instruct` (8,192 context, good for small files)
+- Model: `llama-3.3-70b` (65,536 context, high quality)
+- API Key: Get from [Cerebras](https://cerebras.ai/)
+
+**Google Gemini (Advanced Features):**
+- Model: `gemini-2.5-flash-lite` (1M context, cost-effective)
+- Model: `gemini-2.5-pro` (2M+ context, best quality)
+- API Key: Get from [Google AI Studio](https://aistudio.google.com/)
 
 **Note**: For security, API keys are stored locally in the user's browser. This setup is for local use and demonstration.
 
@@ -182,4 +246,4 @@ This project is open-source and available under the MIT License.
 
 ---
 
-**Last Updated**: January 2025 | **Version**: 2.0 Final | **Status**: Production Ready 🚀
+**Last Updated**: August 2025 | **Version**: 2.0 Final | **Status**: Production Ready 🚀
