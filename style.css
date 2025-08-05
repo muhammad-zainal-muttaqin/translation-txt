@@ -512,10 +512,10 @@ footer {
     backdrop-filter: saturate(130%) blur(10px);
     -webkit-backdrop-filter: saturate(130%) blur(10px);
     box-shadow: 0 -8px 24px rgba(0,0,0,0.18);
-    /* Smart width transitions */
-    width: calc(100% - 44px);
-    margin-left: 22px;
-    margin-right: 22px;
+    /* Smart width transitions - match main container width */
+    max-width: 1200px;
+    margin-left: auto;
+    margin-right: auto;
     border-radius: 16px;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -613,7 +613,7 @@ footer.at-bottom {
     
     /* Mobile footer adjustments */
     footer {
-        width: calc(100% - 28px);
+        max-width: calc(100% - 28px);
         margin-left: 14px;
         margin-right: 14px;
     }
