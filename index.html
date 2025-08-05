@@ -80,22 +80,32 @@
 
         <section>
             <h2>🌐 Language Settings</h2>
-            <label for="source-language">Source Language</label>
-            <select id="source-language">
-                <option value="auto">Auto Detect</option>
-                <option value="en">English</option>
-                <option value="id">Indonesian</option>
-                <option value="ja">Japanese</option>
-                <option value="es">Spanish</option>
-            </select>
-
-            <label for="target-language">Target Language</label>
-            <select id="target-language">
-                <option value="id">Indonesian</option>
-                <option value="en">English</option>
-                <option value="ja">Japanese</option>
-                <option value="es">Spanish</option>
-            </select>
+            <div class="grid-2">
+                <div>
+                    <label for="source-language">Source Language</label>
+                    <select id="source-language">
+                        <option value="auto">Auto Detect</option>
+                        <option value="en">English</option>
+                        <option value="id">Indonesian</option>
+                        <option value="ja">Japanese</option>
+                        <option value="es">Spanish</option>
+                        <option value="custom">Custom...</option>
+                    </select>
+                    <input type="text" id="source-language-custom" placeholder="Enter custom source language (e.g., French, German, Chinese)" style="display:none;">
+                </div>
+                <div>
+                    <label for="target-language">Target Language</label>
+                    <select id="target-language">
+                        <option value="id">Indonesian</option>
+                        <option value="en">English</option>
+                        <option value="ja">Japanese</option>
+                        <option value="es">Spanish</option>
+                        <option value="custom">Custom...</option>
+                    </select>
+                    <input type="text" id="target-language-custom" placeholder="Enter custom target language (e.g., French, German, Chinese)" style="display:none;">
+                </div>
+            </div>
+            <small class="helper">Select from common languages or choose "Custom..." to enter your own language name.</small>
         </section>
 
         <section>

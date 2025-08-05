@@ -12,9 +12,13 @@ document.addEventListener('DOMContentLoaded', () => {
         api: {
             providerSelect: document.getElementById('api-provider'),
             modelNameInput: document.getElementById('model-name-input'),
-            keyInput: document.getElementById('api-key-input'),
-            sourceLanguageSelect: document.getElementById('source-language'),
-            targetLanguageSelect: document.getElementById('target-language')
+            keyInput: document.getElementById('api-key-input')
+        },
+        language: {
+            sourceSelect: document.getElementById('source-language'),
+            targetSelect: document.getElementById('target-language'),
+            sourceCustom: document.getElementById('source-language-custom'),
+            targetCustom: document.getElementById('target-language-custom')
         },
         instruction: {
             useDefaultCheckbox: document.getElementById('use-default-instruction'),
@@ -200,6 +204,24 @@ document.addEventListener('DOMContentLoaded', () => {
             elements.translation.pauseBtn.addEventListener('click', () => log('Pause feature not available yet.'));
         }
 
+        // Language selection change
+        elements.language.sourceSelect.addEventListener('change', () => {
+            updateSplitCalculation();
+            toggleCustomLanguageInput('source');
+        });
+        elements.language.targetSelect.addEventListener('change', () => {
+            updateSplitCalculation();
+            toggleCustomLanguageInput('target');
+        });
+
+        // Custom language input change
+        elements.language.sourceCustom.addEventListener('input', () => {
+            updateSplitCalculation();
+        });
+        elements.language.targetCustom.addEventListener('input', () => {
+            updateSplitCalculation();
+        });
+
         // File Splitting Events
         elements.splitting.autoToggle.addEventListener('change', updateSplitCalculation);
         elements.splitting.maxLinesInput.addEventListener('input', updateSplitCalculation);
@@ -232,6 +254,31 @@ document.addEventListener('DOMContentLoaded', () => {
         const time = new Date().toLocaleTimeString();
         elements.translation.logContent.textContent += `[${time}] ${msg}\n`;
         elements.translation.logContent.parentElement.scrollTop = elements.translation.logContent.parentElement.scrollHeight;
+    };
+
+    // Toggle custom language input visibility
+    const toggleCustomLanguageInput = (type) => {
+        const select = type === 'source' ? elements.language.sourceSelect : elements.language.targetSelect;
+        const customInput = type === 'source' ? elements.language.sourceCustom : elements.language.targetCustom;
+        
+        if (select.value === 'custom') {
+            customInput.style.display = 'block';
+            customInput.focus();
+        } else {
+            customInput.style.display = 'none';
+            customInput.value = '';
+        }
+    };
+
+    // Get language value (from select or custom input)
+    const getLanguageValue = (type) => {
+        const select = type === 'source' ? elements.language.sourceSelect : elements.language.targetSelect;
+        const customInput = type === 'source' ? elements.language.sourceCustom : elements.language.targetCustom;
+        
+        if (select.value === 'custom') {
+            return customInput.value.trim() || 'Unknown';
+        }
+        return select.value;
     };
 
     // Update split calculation text and enforce UI states
@@ -478,8 +525,8 @@ OUTPUT: Return the exact same structure with only the translatable text converte
             errorHandling.show('Please upload a .txt file first.');
             return;
         }
-        const sourceLang = elements.api.sourceLanguageSelect.value;
-        const targetLang = elements.api.targetLanguageSelect.value;
+        const sourceLang = getLanguageValue('source');
+        const targetLang = getLanguageValue('target');
         let instruction = elements.instruction.customTextarea.value.trim();
         if (!instruction || elements.instruction.useDefaultCheckbox.checked) {
             instruction = 'Translate the following text naturally and accurately. Maintain the original formatting, tone, and context. For technical terms, provide appropriate translations while keeping important keywords recognizable.';
@@ -577,8 +624,8 @@ OUTPUT: Return the exact same structure with only the translatable text converte
             const metadata = {
                 originalFile: originalFileName,
                 translatedFile: translatedFileName,
-                sourceLanguage: elements.language.sourceSelect.value,
-                targetLanguage: elements.language.targetSelect.value,
+                sourceLanguage: getLanguageValue('source'),
+                targetLanguage: getLanguageValue('target'),
                 translationDate: new Date().toISOString(),
                 totalChunks: state.translatedChunks.length,
                 provider: elements.api.providerSelect.value,
