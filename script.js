@@ -245,6 +245,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const init = () => {
         setupEventListeners();
         setupSmoothScrolling();
+        setupSmartFooter();
         const initialProvider = elements.api.providerSelect.value;
         apiManagement.setConfig(initialProvider);
         elements.instruction.useDefaultCheckbox.dispatchEvent(new Event('change'));
@@ -395,6 +396,42 @@ document.addEventListener('DOMContentLoaded', () => {
         if ('ontouchstart' in window) {
             document.body.style.webkitOverflowScrolling = 'touch';
         }
+    };
+
+    // Smart Footer with dynamic width
+    const setupSmartFooter = () => {
+        const footer = document.querySelector('footer');
+        let ticking = false;
+
+        const updateFooterState = () => {
+            const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+            const windowHeight = window.innerHeight;
+            const documentHeight = document.documentElement.scrollHeight;
+            
+            // Check if we're near the bottom (within 50px)
+            const isNearBottom = (scrollTop + windowHeight) >= (documentHeight - 50);
+            
+            if (isNearBottom) {
+                footer.classList.add('at-bottom');
+            } else {
+                footer.classList.remove('at-bottom');
+            }
+            
+            ticking = false;
+        };
+
+        const requestTick = () => {
+            if (!ticking) {
+                requestAnimationFrame(updateFooterState);
+                ticking = true;
+            }
+        };
+
+        // Listen for scroll events
+        window.addEventListener('scroll', requestTick, { passive: true });
+        
+        // Initial check
+        updateFooterState();
     };
 
     // Update split calculation text and enforce UI states
