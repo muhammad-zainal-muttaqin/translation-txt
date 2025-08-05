@@ -263,71 +263,81 @@ button:focus-visible {
 
 /* Primary: Start & Resume */
 button.start, button.resume {
-    background: linear-gradient(180deg, var(--primary-500), var(--primary-600));
-    border-color: rgba(76,142,255,0.35);
-    color: #0b1021;
-    text-shadow: 0 1px 0 rgba(255,255,255,0.35);
+    background: linear-gradient(180deg, #3b82f6, #2563eb);
+    border-color: rgba(59,130,246,0.4);
+    color: #ffffff;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+    font-weight: 600;
 }
 
 button.start:hover:not(:disabled), button.resume:hover:not(:disabled) {
-    background: linear-gradient(180deg, var(--primary-400), var(--primary-600));
-    filter: brightness(1.04);
+    background: linear-gradient(180deg, #60a5fa, #3b82f6);
+    filter: brightness(1.1);
+    transform: translateY(-1px);
 }
 
 button.start:active:not(:disabled), button.resume:active:not(:disabled) {
-    background: linear-gradient(180deg, var(--primary-500), var(--primary-600));
+    background: linear-gradient(180deg, #3b82f6, #2563eb);
     box-shadow: inset 0 2px 6px rgba(0,0,0,0.35);
 }
 
 /* Secondary: Pause */
 button.pause {
-    background: linear-gradient(180deg, var(--secondary-500), var(--secondary-600));
-    border-color: rgba(255,160,86,0.35);
-    color: #0b1021;
-    text-shadow: 0 1px 0 rgba(255,255,255,0.35);
+    background: linear-gradient(180deg, #ff8a3d, #ff6b1a);
+    border-color: rgba(255,138,61,0.4);
+    color: #ffffff;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+    font-weight: 600;
 }
 
 button.pause:hover:not(:disabled) {
-    background: linear-gradient(180deg, var(--secondary-400), var(--secondary-600));
-    filter: brightness(1.04);
+    background: linear-gradient(180deg, #ff9d5c, #ff8a3d);
+    filter: brightness(1.1);
+    transform: translateY(-1px);
 }
 
 button.pause:active:not(:disabled) {
-    background: linear-gradient(180deg, var(--secondary-500), var(--secondary-600));
+    background: linear-gradient(180deg, #ff8a3d, #ff6b1a);
     box-shadow: inset 0 2px 6px rgba(0,0,0,0.35);
 }
 
 /* Destructive: Cancel */
 button.cancel {
-    background: linear-gradient(180deg, var(--danger-500), var(--danger-600));
-    border-color: rgba(255,118,133,0.35);
-    color: #0b1021;
-    text-shadow: 0 1px 0 rgba(255,255,255,0.35);
+    background: linear-gradient(180deg, #ef4444, #dc2626);
+    border-color: rgba(239,68,68,0.4);
+    color: #ffffff;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+    font-weight: 600;
 }
 
 button.cancel:hover:not(:disabled) {
-    background: linear-gradient(180deg, var(--danger-400), var(--danger-600));
+    background: linear-gradient(180deg, #f87171, #ef4444);
+    filter: brightness(1.1);
+    transform: translateY(-1px);
 }
 
 button.cancel:active:not(:disabled) {
-    background: linear-gradient(180deg, var(--danger-500), var(--danger-600));
+    background: linear-gradient(180deg, #ef4444, #dc2626);
     box-shadow: inset 0 2px 6px rgba(0,0,0,0.35);
 }
 
 /* Neutral: Clear All */
 button.clear-all {
-    background: linear-gradient(180deg, var(--neutral-600), var(--neutral-700));
-    border-color: rgba(168,177,195,0.35);
-    color: #0b1021;
-    text-shadow: 0 1px 0 rgba(255,255,255,0.35);
+    background: linear-gradient(180deg, #64748b, #475569);
+    border-color: rgba(100,116,139,0.4);
+    color: #ffffff;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+    font-weight: 600;
 }
 
 button.clear-all:hover:not(:disabled) {
-    background: linear-gradient(180deg, var(--neutral-500), var(--neutral-700));
+    background: linear-gradient(180deg, #94a3b8, #64748b);
+    filter: brightness(1.1);
+    transform: translateY(-1px);
 }
 
 button.clear-all:active:not(:disabled) {
-    background: linear-gradient(180deg, var(--neutral-600), var(--neutral-700));
+    background: linear-gradient(180deg, #64748b, #475569);
     box-shadow: inset 0 2px 6px rgba(0,0,0,0.35);
 }
 
