@@ -281,6 +281,37 @@ document.addEventListener('DOMContentLoaded', () => {
         return select.value;
     };
 
+    // Get language suffix for filename
+    const getLanguageSuffix = (languageCode) => {
+        const languageMap = {
+            'en': 'english',
+            'id': 'indonesia',
+            'ja': 'japanese',
+            'es': 'spanish',
+            'fr': 'french',
+            'de': 'german',
+            'zh': 'chinese',
+            'ko': 'korean',
+            'ar': 'arabic',
+            'ru': 'russian',
+            'pt': 'portuguese',
+            'it': 'italian',
+            'nl': 'dutch',
+            'sv': 'swedish',
+            'no': 'norwegian',
+            'da': 'danish',
+            'fi': 'finnish',
+            'pl': 'polish',
+            'tr': 'turkish',
+            'hi': 'hindi',
+            'th': 'thai',
+            'vi': 'vietnamese',
+            'auto': 'auto-detected'
+        };
+        
+        return languageMap[languageCode] || languageCode.toLowerCase();
+    };
+
     // Update split calculation text and enforce UI states
     const updateSplitCalculation = () => {
         const auto = elements.splitting.autoToggle.checked;
@@ -587,16 +618,27 @@ OUTPUT: Return the exact same structure with only the translatable text converte
             errorHandling.show('No results to download.');
             return;
         }
+
+        // Generate smart filename
+        const originalFileName = state.uploadedFileName || 'document.txt';
+        const targetLang = getLanguageValue('target');
+        const languageSuffix = getLanguageSuffix(targetLang);
+        
+        // Remove extension and add language suffix
+        const baseName = originalFileName.replace(/\.[^/.]+$/, '');
+        const extension = originalFileName.split('.').pop() || 'txt';
+        const translatedFileName = `${baseName}-${languageSuffix}.${extension}`;
+
         const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'translated.txt';
+        a.download = translatedFileName;
         document.body.appendChild(a);
         a.click();
         a.remove();
         URL.revokeObjectURL(url);
-        log('Translation result downloaded as translated.txt');
+        log(`Translation result downloaded as ${translatedFileName}`);
     };
 
     const handleDownloadZip = async () => {
@@ -617,7 +659,13 @@ OUTPUT: Return the exact same structure with only the translatable text converte
 
             // Add translated file
             const translatedContent = state.translatedChunks.filter(Boolean).join('\n\n');
-            const translatedFileName = originalFileName.replace(/\.[^/.]+$/, '') + '_translated.txt';
+            const targetLang = getLanguageValue('target');
+            const languageSuffix = getLanguageSuffix(targetLang);
+            
+            // Generate smart filename for translated file
+            const baseName = originalFileName.replace(/\.[^/.]+$/, '');
+            const extension = originalFileName.split('.').pop() || 'txt';
+            const translatedFileName = `${baseName}-${languageSuffix}.${extension}`;
             zip.file(translatedFileName, translatedContent);
 
             // Add metadata file
