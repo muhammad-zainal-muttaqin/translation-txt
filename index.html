@@ -39,19 +39,19 @@
 </head>
 <body>
     <header>
-        <h1>✨ Translation TXT</h1>
+        <h1>📜 Translation TXT</h1>
     </header>
     <main>
         <section>
             <h2>📂 Upload File</h2>
             <div id="drag-drop-area" class="drag-drop-area">Drag & drop file here or click to select</div>
             <input type="file" id="file-input" accept=".txt,.csv,.md,.json,.log,.srt,.vtt,.xml,.yaml,.yml">
+            <small class="helper">Supported formats: .txt, .csv, .md, .json, .log, .srt, .vtt, .xml, .yaml, .yml</small>
             <div id="file-info" style="display:none;">
                 <p>File Name: <span id="file-name"></span></p>
                 <p>Size: <span id="file-size"></span></p>
                 <p>Line Count: <span id="line-count"></span></p>
             </div>
-            <p style="color:#94a3b8;margin:8px 0 0">Supports various common text formats.</p>
         </section>
 
         <section>
@@ -134,11 +134,11 @@
         <section>
             <h2>🚀 Controls</h2>
             <div class="btn-row">
-                <button id="start-translation">Start Translation</button>
-                <button id="pause-translation" disabled>Pause</button>
-                <button id="resume-translation" disabled>Resume</button>
-                <button id="cancel-translation" disabled>Cancel</button>
-                <button id="clear-all" class="clear-btn">Clear All Progress</button>
+                <button id="start-translation" class="start">Start Translation</button>
+                <button id="pause-translation" class="pause" disabled>Pause</button>
+                <button id="resume-translation" class="resume" disabled>Resume</button>
+                <button id="cancel-translation" class="cancel" disabled>Cancel</button>
+                <button id="clear-all" class="clear-all">Clear All Progress</button>
             </div>
 
             <div class="progress-bar-container">
