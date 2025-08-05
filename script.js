@@ -468,13 +468,17 @@ document.addEventListener('DOMContentLoaded', () => {
 4. NO ADDITIONS: Do not add explanations, notes, or extra content
 5. NO DELETIONS: Do not remove or skip any part of the original
 6. NO REFORMATTING: Keep exact spacing, indentation, and line breaks
+7. LANGUAGE CHANGE: You MUST translate the text from ${sourceLang} to ${targetLang} - DO NOT keep original language
 
 TRANSLATION TASK:
 - Source Language: ${sourceLang}
 - Target Language: ${targetLang}
 - Content Type: ${fileExtension.toUpperCase()}
+- REQUIREMENT: Convert ALL text from ${sourceLang} to ${targetLang}
 
 ${customInstruction ? `CUSTOM INSTRUCTION: ${customInstruction}\n` : ''}
+
+IMPORTANT: The output MUST be in ${targetLang} language, not in ${sourceLang}. If you see text in ${sourceLang}, translate it to ${targetLang}.
 
 `;
 
@@ -512,11 +516,13 @@ Before outputting, verify:
 ✓ No added explanations
 ✓ Syntax elements unchanged
 ✓ Only content text translated
+✓ Language changed from ${sourceLang} to ${targetLang}
+✓ No original ${sourceLang} text remains untranslated
 
 INPUT CONTENT:
 ${content}
 
-OUTPUT: Return the exact same structure with only the translatable text converted to target language.`;
+OUTPUT: Return the exact same structure with ALL text converted from ${sourceLang} to ${targetLang}. Ensure NO text remains in the original ${sourceLang} language.`;
 
         return basePrompt + specificRule + validationPrompt;
     };
@@ -609,30 +615,74 @@ OUTPUT: Return the exact same structure with only the translatable text converte
         // Build robust translation prompt based on file format
         const prompt = buildRobustTranslationPrompt(chunk, sourceLang, targetLang, instruction);
 
-        if (provider === 'google') {
-            const data = await callGoogle(apiKey, modelName, prompt);
-            if (data && data.promptFeedback && data.promptFeedback.blockReason) {
-                if (data.promptFeedback.blockReason === 'PROHIBITED_CONTENT') {
-                    throw new Error('Translation failed: Content may violate usage policy. Please try with different text.');
+        let translatedText = '';
+        let retryCount = 0;
+        const maxRetries = 2;
+
+        while (retryCount <= maxRetries) {
+            try {
+                if (provider === 'google') {
+                    const data = await callGoogle(apiKey, modelName, prompt);
+                    if (data && data.promptFeedback && data.promptFeedback.blockReason) {
+                        if (data.promptFeedback.blockReason === 'PROHIBITED_CONTENT') {
+                            throw new Error('Translation failed: Content may violate usage policy. Please try with different text.');
+                        }
+                    }
+                    translatedText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+                    if (!translatedText) throw new Error('Translation failed: API response is invalid or incomplete.');
+                }
+                else if (provider === 'openrouter') {
+                    const data = await callOpenRouter(apiKey, modelName, prompt);
+                    translatedText = data?.choices?.[0]?.message?.content;
+                    if (!translatedText) throw new Error('Translation failed: API response is invalid or incomplete.');
+                }
+                else if (provider === 'cerebras') {
+                    const data = await callCerebras(apiKey, modelName, prompt);
+                    translatedText = data?.choices?.[0]?.message?.content;
+                    if (!translatedText) throw new Error('Translation failed: API response is invalid or incomplete.');
+                }
+                else {
+                    throw new Error('Unknown provider.');
+                }
+
+                // Validate translation quality
+                if (translatedText && translatedText.trim()) {
+                    // Check if translation actually changed the language (basic validation)
+                    const originalWords = chunk.split(/\s+/).filter(word => word.length > 2).slice(0, 5);
+                    const translatedWords = translatedText.split(/\s+/).filter(word => word.length > 2).slice(0, 5);
+                    
+                    // If too many words are identical, translation might have failed
+                    const identicalWords = originalWords.filter(word => 
+                        translatedWords.some(tWord => tWord.toLowerCase() === word.toLowerCase())
+                    );
+                    
+                    if (identicalWords.length >= originalWords.length * 0.8) {
+                        if (retryCount < maxRetries) {
+                            retryCount++;
+                            log(`Translation quality check failed for chunk, retrying (${retryCount}/${maxRetries})...`);
+                            await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retry
+                            continue;
+                        } else {
+                            log(`Warning: Translation may not have changed language significantly for this chunk.`);
+                        }
+                    }
+                }
+
+                return translatedText;
+
+            } catch (error) {
+                if (retryCount < maxRetries) {
+                    retryCount++;
+                    log(`Translation failed, retrying (${retryCount}/${maxRetries}): ${error.message}`);
+                    await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds before retry
+                    continue;
+                } else {
+                    throw error;
                 }
             }
-            const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (!text) throw new Error('Translation failed: API response is invalid or incomplete.');
-            return text;
         }
-        if (provider === 'openrouter') {
-            const data = await callOpenRouter(apiKey, modelName, prompt);
-            const text = data?.choices?.[0]?.message?.content;
-            if (!text) throw new Error('Translation failed: API response is invalid or incomplete.');
-            return text;
-        }
-        if (provider === 'cerebras') {
-            const data = await callCerebras(apiKey, modelName, prompt);
-            const text = data?.choices?.[0]?.message?.content;
-            if (!text) throw new Error('Translation failed: API response is invalid or incomplete.');
-            return text;
-        }
-        throw new Error('Unknown provider.');
+
+        return translatedText;
     };
 
     const startTranslation = async () => {
