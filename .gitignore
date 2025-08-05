@@ -1,12 +1,5 @@
-# TODO.md - Internal specification file not needed for tracking
+# Internal documentation
 TODO.md
-
-# Git ignore itself (optional - for cleaner repository)
-.gitignore
-
-# Production files (optional - can be tracked if desired)
-# vercel.json
-# robots.txt
 
 # Logs
 logs
@@ -22,64 +15,39 @@ pids
 *.seed
 *.pid.lock
 
-# Coverage directory used by tools like istanbul
+# Coverage directory
 coverage/
 *.lcov
-
-# nyc test coverage
 .nyc_output
 
-# Grunt intermediate storage (https://gruntjs.com/creating-plugins#storing-task-files)
+# Build tools
 .grunt
-
-# Bower dependency directory (https://bower.io/)
 bower_components
-
-# node_modules
 node_modules/
-
-# Optional npm cache directory
 .npm
-
-# Optional eslint cache
 .eslintcache
-
-# Microbundle cache
 .rpt2_cache/
 .rts2_cache_cjs/
 .rts2_cache_es/
 .rts2_cache_umd/
 
-# Optional REPL history
+# REPL history
 .node_repl_history
-
-# Output of 'npm pack'
 *.tgz
-
-# Yarn Integrity file
 .yarn-integrity
 
-# dotenv environment variables file
+# Environment variables
 .env
 .env.test
 .env.production
 
-# parcel-bundler cache (https://parceljs.org/)
+# Cache directories
 .cache
 .parcel-cache
-
-# Next.js build output
 .next
-
-# Nuxt.js build / generate output
 .nuxt
 dist
-
-# Gatsby files
-.cache/
 public
-
-# Storybook build outputs
 .out
 .storybook-out
 
@@ -87,14 +55,14 @@ public
 tmp/
 temp/
 
-# Editor directories and files
+# Editor files
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 
-# OS generated files
+# OS files
 .DS_Store
 .DS_Store?
 ._*
@@ -103,7 +71,7 @@ temp/
 ehthumbs.db
 Thumbs.db
 
-# API Keys (for security)
+# Security - API keys
 *.key
 api-keys.txt
-secrets.txt
+secrets.txt 
