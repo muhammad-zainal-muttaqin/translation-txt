@@ -553,8 +553,56 @@ OUTPUT: Return the exact same structure with only the translatable text converte
     };
 
     const handleDownloadZip = async () => {
-        errorHandling.show('ZIP feature not implemented in this version.');
-        setTimeout(() => errorHandling.hide(), 3000);
+        if (!state.uploadedFileContent || !state.translatedChunks.some(t => t && t.length > 0)) {
+            errorHandling.show('No files to download. Please upload a file and complete translation first.');
+            setTimeout(() => errorHandling.hide(), 3000);
+            return;
+        }
+
+        try {
+            // Import JSZip dynamically
+            const JSZip = await import('https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js');
+            const zip = new JSZip.default();
+
+            // Add original file
+            const originalFileName = state.uploadedFileName || 'original.txt';
+            zip.file(originalFileName, state.uploadedFileContent);
+
+            // Add translated file
+            const translatedContent = state.translatedChunks.filter(Boolean).join('\n\n');
+            const translatedFileName = originalFileName.replace(/\.[^/.]+$/, '') + '_translated.txt';
+            zip.file(translatedFileName, translatedContent);
+
+            // Add metadata file
+            const metadata = {
+                originalFile: originalFileName,
+                translatedFile: translatedFileName,
+                sourceLanguage: elements.language.sourceSelect.value,
+                targetLanguage: elements.language.targetSelect.value,
+                translationDate: new Date().toISOString(),
+                totalChunks: state.translatedChunks.length,
+                provider: elements.api.providerSelect.value,
+                model: elements.api.modelNameInput.value
+            };
+            zip.file('translation_metadata.json', JSON.stringify(metadata, null, 2));
+
+            // Generate and download ZIP
+            const zipBlob = await zip.generateAsync({ type: 'blob' });
+            const url = URL.createObjectURL(zipBlob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `translation_${Date.now()}.zip`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+
+            log('ZIP file downloaded with original, translated, and metadata files.');
+        } catch (error) {
+            console.error('ZIP creation failed:', error);
+            errorHandling.show('Failed to create ZIP file. Please try again.');
+            setTimeout(() => errorHandling.hide(), 3000);
+        }
     };
 
     const handleCopyToClipboard = async () => {
