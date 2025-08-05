@@ -309,7 +309,18 @@ document.addEventListener('DOMContentLoaded', () => {
             'auto': 'auto-detected'
         };
         
-        return languageMap[languageCode] || languageCode.toLowerCase();
+        // Check if it's a custom language (not in predefined map)
+        if (!languageMap[languageCode]) {
+            // For custom languages, use the input value directly
+            // Clean it up for filename safety
+            return languageCode.toLowerCase()
+                .replace(/[^a-z0-9\s-]/g, '') // Remove special characters
+                .replace(/\s+/g, '-') // Replace spaces with hyphens
+                .replace(/-+/g, '-') // Replace multiple hyphens with single
+                .replace(/^-|-$/g, ''); // Remove leading/trailing hyphens
+        }
+        
+        return languageMap[languageCode];
     };
 
     // Update split calculation text and enforce UI states
