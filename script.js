@@ -142,8 +142,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // Update split calculation after file is loaded
                 setTimeout(() => {
-                    updateSplitCalculation();
-                    log(`File loaded: ${file.name} (${lineCount} lines)`);
+                updateSplitCalculation();
+                log(`File loaded: ${file.name} (${lineCount} lines)`);
                 }, 100);
             };
             reader.readAsText(file);
@@ -242,14 +242,14 @@ document.addEventListener('DOMContentLoaded', () => {
         elements.actions.clearAllBtn.addEventListener('click', handleClearAll);
     };
 
-            const init = () => {
-        setupEventListeners();
+        const init = () => {
+            setupEventListeners();
         setupSmoothScrolling();
-        const initialProvider = elements.api.providerSelect.value;
-        apiManagement.setConfig(initialProvider);
-        elements.instruction.useDefaultCheckbox.dispatchEvent(new Event('change'));
-        updateSplitCalculation();
-    };
+            const initialProvider = elements.api.providerSelect.value;
+            apiManagement.setConfig(initialProvider);
+            elements.instruction.useDefaultCheckbox.dispatchEvent(new Event('change'));
+            updateSplitCalculation();
+        };
 
     const log = (msg) => {
         const time = new Date().toLocaleTimeString();
@@ -452,7 +452,31 @@ document.addEventListener('DOMContentLoaded', () => {
         return chunks;
     };
 
-    const mergeChunks = (chunks) => chunks.join('\n');
+    const mergeChunks = (chunks) => {
+        if (chunks.length === 0) return '';
+        if (chunks.length === 1) return chunks[0];
+        
+        // Smart merge to avoid overlap duplication
+        const merged = [];
+        const overlap = parseInt(elements.splitting.overlapInput.value || '0', 10);
+        
+        for (let i = 0; i < chunks.length; i++) {
+            const chunk = chunks[i];
+            const lines = chunk.split('\n');
+            
+            if (i === 0) {
+                // First chunk: include all lines
+                merged.push(...lines);
+            } else {
+                // Subsequent chunks: skip overlap lines
+                const linesToSkip = Math.max(0, overlap);
+                const linesToInclude = lines.slice(linesToSkip);
+                merged.push(...linesToInclude);
+            }
+        }
+        
+        return merged.join('\n');
+    };
 
     // Build robust translation prompt based on file format
     const buildRobustTranslationPrompt = (content, sourceLang, targetLang, customInstruction) => {
@@ -537,7 +561,7 @@ OUTPUT: Return the exact same structure with ALL text converted from ${sourceLan
             elements.translation.progressBar.style.backgroundSize = '200% 100%';
             elements.translation.progressBar.style.animation = 'progressPulse 2s infinite';
         } else {
-            elements.translation.progressText.textContent = `${pct}%`;
+        elements.translation.progressText.textContent = `${pct}%`;
             elements.translation.progressBar.style.background = '';
             elements.translation.progressBar.style.backgroundSize = '';
             elements.translation.progressBar.style.animation = '';
@@ -633,10 +657,10 @@ OUTPUT: Return the exact same structure with ALL text converted from ${sourceLan
 
         while (retryCount <= maxRetries) {
             try {
-                if (provider === 'google') {
-                    const data = await callGoogle(apiKey, modelName, prompt);
-                    if (data && data.promptFeedback && data.promptFeedback.blockReason) {
-                        if (data.promptFeedback.blockReason === 'PROHIBITED_CONTENT') {
+        if (provider === 'google') {
+            const data = await callGoogle(apiKey, modelName, prompt);
+            if (data && data.promptFeedback && data.promptFeedback.blockReason) {
+                if (data.promptFeedback.blockReason === 'PROHIBITED_CONTENT') {
                             throw new Error('Translation failed: Content may violate usage policy. Please try with different text.');
                         }
                     }
@@ -868,7 +892,7 @@ OUTPUT: Return the exact same structure with ALL text converted from ${sourceLan
         } catch (error) {
             console.error('ZIP creation failed:', error);
             errorHandling.show('Failed to create ZIP file. Please try again.');
-            setTimeout(() => errorHandling.hide(), 3000);
+        setTimeout(() => errorHandling.hide(), 3000);
         }
     };
 
