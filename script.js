@@ -231,7 +231,7 @@ document.addEventListener('DOMContentLoaded', () => {
         elements.instruction.useDefaultCheckbox.addEventListener('change', () => {
             elements.instruction.customTextarea.disabled = elements.instruction.useDefaultCheckbox.checked;
             if (elements.instruction.useDefaultCheckbox.checked) {
-                elements.instruction.customTextarea.value = "Translate the following text naturally and accurately. Maintain the original formatting, tone, and context. For technical terms, provide appropriate translations while keeping important keywords recognizable.";
+                elements.instruction.customTextarea.value = "Translate the following text completely, naturally and accurately. Maintain the original formatting, tone, and context. For technical terms, provide appropriate translations while keeping important keywords recognizable. AND Please keep the kinship terms and honorifics in the translation, and write them in romaji.";
             }
         });
 
@@ -731,7 +731,7 @@ OUTPUT: Return the exact same structure with ALL text converted from ${sourceLan
         const targetLang = getLanguageValue('target');
         let instruction = elements.instruction.customTextarea.value.trim();
         if (!instruction || elements.instruction.useDefaultCheckbox.checked) {
-            instruction = 'Translate the following text naturally and accurately. Maintain the original formatting, tone, and context. For technical terms, provide appropriate translations while keeping important keywords recognizable.';
+            instruction = 'Translate the following text completely, naturally and accurately. Maintain the original formatting, tone, and context. For technical terms, provide appropriate translations while keeping important keywords recognizable. AND Please keep the kinship terms and honorifics in the translation, and write them in romaji.';
         }
 
         state.translationAborted = false;
