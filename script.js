@@ -65,6 +65,10 @@ document.addEventListener('DOMContentLoaded', () => {
         translatedChunks: [],
         originalChunks: [],
         translationAborted: false,
+        splitConfig: {
+            maxLines: 300,
+            overlap: 0
+        },
         api: {
             key: '',
             endpoint: '',
@@ -87,16 +91,29 @@ document.addEventListener('DOMContentLoaded', () => {
     // API Management Functions
     const apiManagement = {
         loadKey: (provider) => {
-            const key = localStorage.getItem(`${provider}_api_key`);
+            let key = '';
+            try {
+                key = localStorage.getItem(`${provider}_api_key`) || '';
+            } catch (error) {
+                log(`Warning: Unable to access saved API key for ${provider}.`);
+            }
             elements.api.keyInput.value = key || '';
             state.api.key = key || '';
         },
         saveKey: (provider, key) => {
-            localStorage.setItem(`${provider}_api_key`, key);
+            try {
+                localStorage.setItem(`${provider}_api_key`, key);
+            } catch (error) {
+                log('Warning: Unable to persist API key in local storage.');
+            }
             state.api.key = key;
         },
         saveModelName: (provider, modelName) => {
-            localStorage.setItem(`${provider}_model_name`, modelName);
+            try {
+                localStorage.setItem(`${provider}_model_name`, modelName);
+            } catch (error) {
+                log('Warning: Unable to persist model name in local storage.');
+            }
             state.api.modelName = modelName;
         },
         setConfig: (provider) => {
@@ -111,7 +128,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     state.api.endpoint = 'https://generativelanguage.googleapis.com/v1beta/models/';
                     break;
             }
-            const savedModelName = localStorage.getItem(`${provider}_model_name`);
+            let savedModelName = '';
+            try {
+                savedModelName = localStorage.getItem(`${provider}_model_name`) || '';
+            } catch (error) {
+                log(`Warning: Unable to access saved model name for ${provider}.`);
+            }
             if (savedModelName) {
                 elements.api.modelNameInput.value = savedModelName;
                 state.api.modelName = savedModelName;
@@ -123,7 +145,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // File Handling Functions
     const fileHandling = {
         handleFile: (file) => {
-            if (file.type !== 'text/plain') {
+            const isPlainText = file.type === 'text/plain';
+            const hasTxtExtension = file.name.toLowerCase().endsWith('.txt');
+            if (!isPlainText && !hasTxtExtension) {
                 alert('Please upload a .txt file.');
                 return;
             }
@@ -400,8 +424,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // Update split calculation text and enforce UI states
     const updateSplitCalculation = () => {
         const auto = elements.splitting.autoToggle.checked;
-        const maxLines = parseInt(elements.splitting.maxLinesInput.value || '300', 10);
-        const overlap = parseInt(elements.splitting.overlapInput.value || '0', 10);
 
         elements.splitting.maxLinesInput.disabled = auto;
         elements.splitting.overlapInput.disabled = auto;
@@ -410,35 +432,37 @@ document.addEventListener('DOMContentLoaded', () => {
             elements.splitting.calculationPara.textContent = 'No file loaded yet.';
             return;
         }
-        
+
         const totalLines = state.uploadedFileContent.split('\n').length;
-        let effMax = Math.max(1, maxLines);
-        let effOverlap = Math.max(0, Math.min(overlap, effMax - 1));
+        const { maxLines, overlap } = getEffectiveSplitConfig(totalLines);
+        state.splitConfig = { maxLines, overlap };
 
-        if (auto) {
-            effMax = Math.min(500, Math.max(50, Math.ceil(totalLines / Math.max(1, Math.ceil(totalLines / 300)))));
-            effOverlap = Math.min(5, Math.max(0, Math.floor(effMax * 0.05)));
-        }
-
-        const chunks = Math.max(1, Math.ceil((totalLines - effOverlap) / (effMax - effOverlap)));
-        elements.splitting.calculationPara.textContent = `Estimate: ${chunks} chunks • Max ${effMax} lines/chunk • Overlap ${effOverlap}`;
+        const chunks = Math.max(1, Math.ceil((totalLines - overlap) / (maxLines - overlap)));
+        elements.splitting.calculationPara.textContent = `Estimate: ${chunks} chunks • Max ${maxLines} lines/chunk • Overlap ${overlap}`;
     };
 
-    const splitFileContent = (text) => {
+    const getEffectiveSplitConfig = (totalLines) => {
         const auto = elements.splitting.autoToggle.checked;
         let maxLines = parseInt(elements.splitting.maxLinesInput.value || '300', 10);
         let overlap = parseInt(elements.splitting.overlapInput.value || '0', 10);
 
-        const lines = text.split('\n');
-        const total = lines.length;
-
         if (auto) {
-            maxLines = Math.min(500, Math.max(50, Math.ceil(total / Math.max(1, Math.ceil(total / 300)))));
+            maxLines = Math.min(500, Math.max(50, Math.ceil(totalLines / Math.max(1, Math.ceil(totalLines / 300)))));
             overlap = Math.min(5, Math.max(0, Math.floor(maxLines * 0.05)));
         } else {
             maxLines = Math.max(1, maxLines);
             overlap = Math.max(0, Math.min(overlap, maxLines - 1));
         }
+
+        return { maxLines, overlap };
+    };
+
+    const splitFileContent = (text) => {
+        const lines = text.split('\n');
+        const total = lines.length;
+        const { maxLines, overlap } = getEffectiveSplitConfig(total);
+
+        state.splitConfig = { maxLines, overlap };
 
         const chunks = [];
         let start = 0;
@@ -458,7 +482,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Smart merge to avoid overlap duplication
         const merged = [];
-        const overlap = parseInt(elements.splitting.overlapInput.value || '0', 10);
+        const overlap = state.splitConfig.overlap;
         
         for (let i = 0; i < chunks.length; i++) {
             const chunk = chunks[i];
@@ -656,6 +680,9 @@ OUTPUT: Return the exact same structure with ALL text converted from ${sourceLan
         const maxRetries = 2;
 
         while (retryCount <= maxRetries) {
+            if (state.translationAborted) {
+                throw new Error('Translation cancelled by user.');
+            }
             try {
         if (provider === 'google') {
             const data = await callGoogle(apiKey, modelName, prompt);
@@ -854,7 +881,7 @@ OUTPUT: Return the exact same structure with ALL text converted from ${sourceLan
             zip.file(originalFileName, state.uploadedFileContent);
 
             // Add translated file
-            const translatedContent = state.translatedChunks.filter(Boolean).join('\n\n');
+            const translatedContent = mergeChunks(state.translatedChunks.filter(Boolean));
             const targetLang = getLanguageValue('target');
             const languageSuffix = getLanguageSuffix(targetLang);
             
