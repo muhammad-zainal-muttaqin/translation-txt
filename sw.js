@@ -17,14 +17,17 @@ self.addEventListener('install', (event) => {
   );
 });
 
-// Fetch event - serve from cache if available
+// Fetch event - network first, fall back to cache
 self.addEventListener('fetch', (event) => {
   event.respondWith(
-    caches.match(event.request)
+    fetch(event.request)
       .then((response) => {
-        // Return cached version or fetch from network
-        return response || fetch(event.request);
+        // Update cache with fresh response
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+        return response;
       })
+      .catch(() => caches.match(event.request))
   );
 });
 

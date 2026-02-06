@@ -33,7 +33,6 @@ document.addEventListener('DOMContentLoaded', () => {
         translation: {
             startBtn: document.getElementById('start-translation'),
             stopBtn: document.getElementById('cancel-translation'),
-            pauseBtn: document.getElementById('pause-translation'),
             progressBar: document.querySelector('.progress-bar'),
             progressText: document.getElementById('progress-text'),
             logContent: document.getElementById('log-content')
@@ -65,12 +64,18 @@ document.addEventListener('DOMContentLoaded', () => {
         translatedChunks: [],
         originalChunks: [],
         translationAborted: false,
+        activeOverlap: 0,
+        isTranslating: false,
+        abortController: null,
         api: {
             key: '',
             endpoint: '',
             modelName: ''
         }
     };
+
+    // Default instruction (single source of truth)
+    const DEFAULT_INSTRUCTION = 'Translate the following text completely, naturally and accurately. Maintain the original formatting, tone, and context. For technical terms, provide appropriate translations while keeping important keywords recognizable. AND Please keep the kinship terms and honorifics in the translation, and write them in romaji.';
 
     // Error Handling Functions
     const errorHandling = {
@@ -123,12 +128,17 @@ document.addEventListener('DOMContentLoaded', () => {
     // File Handling Functions
     const fileHandling = {
         handleFile: (file) => {
-            if (file.type !== 'text/plain') {
-                alert('Please upload a .txt file.');
+            const allowedExtensions = ['txt', 'csv', 'md', 'json', 'log', 'srt', 'vtt', 'xml', 'yaml', 'yml'];
+            const ext = file.name.split('.').pop()?.toLowerCase() || '';
+            if (!allowedExtensions.includes(ext)) {
+                alert(`Unsupported file format (.${ext}). Supported: ${allowedExtensions.join(', ')}`);
                 return;
             }
 
             const reader = new FileReader();
+            reader.onerror = () => {
+                errorHandling.show('Failed to read file. The file may be corrupted or inaccessible.');
+            };
             reader.onload = (e) => {
                 state.uploadedFileContent = e.target.result;
                 state.uploadedFileName = file.name;
@@ -200,10 +210,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (elements.translation.stopBtn) {
             elements.translation.stopBtn.addEventListener('click', stopTranslation);
         }
-        if (elements.translation.pauseBtn) {
-            elements.translation.pauseBtn.addEventListener('click', () => log('Pause feature not available yet.'));
-        }
-
         // Language selection change
         elements.language.sourceSelect.addEventListener('change', () => {
             updateSplitCalculation();
@@ -231,7 +237,7 @@ document.addEventListener('DOMContentLoaded', () => {
         elements.instruction.useDefaultCheckbox.addEventListener('change', () => {
             elements.instruction.customTextarea.disabled = elements.instruction.useDefaultCheckbox.checked;
             if (elements.instruction.useDefaultCheckbox.checked) {
-                elements.instruction.customTextarea.value = "Translate the following text completely, naturally and accurately. Maintain the original formatting, tone, and context. For technical terms, provide appropriate translations while keeping important keywords recognizable. AND Please keep the kinship terms and honorifics in the translation, and write them in romaji.";
+                elements.instruction.customTextarea.value = DEFAULT_INSTRUCTION;
             }
         });
 
@@ -242,14 +248,14 @@ document.addEventListener('DOMContentLoaded', () => {
         elements.actions.clearAllBtn.addEventListener('click', handleClearAll);
     };
 
-        const init = () => {
-            setupEventListeners();
+    const init = () => {
+        setupEventListeners();
         setupSmoothScrolling();
-            const initialProvider = elements.api.providerSelect.value;
-            apiManagement.setConfig(initialProvider);
-            elements.instruction.useDefaultCheckbox.dispatchEvent(new Event('change'));
-            updateSplitCalculation();
-        };
+        const initialProvider = elements.api.providerSelect.value;
+        apiManagement.setConfig(initialProvider);
+        elements.instruction.useDefaultCheckbox.dispatchEvent(new Event('change'));
+        updateSplitCalculation();
+    };
 
     const log = (msg) => {
         const time = new Date().toLocaleTimeString();
@@ -324,77 +330,16 @@ document.addEventListener('DOMContentLoaded', () => {
         return languageMap[languageCode];
     };
 
-    // Enhanced Smooth Scrolling System
+    // Smooth scroll anchor links (browser handles scroll performance natively)
     const setupSmoothScrolling = () => {
-        // Easing function for smooth animation
-        const easeOutCubic = t => --t * t * t + 1;
-        
-        // Smooth scroll to element or position
-        const smoothScrollTo = (target, duration = 600) => {
-            const startY = window.scrollY;
-            const targetY = typeof target === 'number' ? target : target.offsetTop;
-            const difference = targetY - startY;
-            const startTime = performance.now();
-
-            if (difference === 0) return;
-
-            const step = () => {
-                const progress = (performance.now() - startTime) / duration;
-                const amount = easeOutCubic(Math.min(progress, 1));
-                window.scrollTo({ 
-                    top: startY + amount * difference,
-                    behavior: 'auto' // Use auto for better performance
-                });
-                
-                if (progress < 0.99) {
-                    requestAnimationFrame(step);
-                }
-            };
-            
-            requestAnimationFrame(step);
-        };
-
-        // Enhanced scroll performance for all scrollable elements
-        const enhanceScrollPerformance = () => {
-            const scrollableElements = document.querySelectorAll('main, .split-view, #log-content, .original-view pre, .translated-view pre');
-            
-            scrollableElements.forEach(element => {
-                // Add hardware acceleration
-                element.style.transform = 'translateZ(0)';
-                element.style.willChange = 'scroll-position';
-                
-                // Smooth scroll for internal elements
-                element.addEventListener('wheel', (e) => {
-                    if (element.scrollHeight > element.clientHeight) {
-                        e.preventDefault();
-                        const delta = e.deltaY;
-                        const scrollStep = Math.abs(delta) > 50 ? delta * 0.5 : delta;
-                        
-                        element.scrollTop += scrollStep;
-                    }
-                }, { passive: false });
-            });
-        };
-
-        // Initialize enhanced scrolling
-        enhanceScrollPerformance();
-        
-        // Add smooth scroll to anchor links
         document.addEventListener('click', (e) => {
             const target = e.target.closest('a[href^="#"]');
             if (target) {
                 e.preventDefault();
-                const element = document.querySelector(target.getAttribute('href'));
-                if (element) {
-                    smoothScrollTo(element, 800);
-                }
+                const el = document.querySelector(target.getAttribute('href'));
+                if (el) el.scrollIntoView({ behavior: 'smooth' });
             }
         });
-
-        // Optimize scroll performance on mobile
-        if ('ontouchstart' in window) {
-            document.body.style.webkitOverflowScrolling = 'touch';
-        }
     };
 
     // Update split calculation text and enforce UI states
@@ -440,6 +385,9 @@ document.addEventListener('DOMContentLoaded', () => {
             overlap = Math.max(0, Math.min(overlap, maxLines - 1));
         }
 
+        // Store active overlap so mergeChunks uses the correct value
+        state.activeOverlap = overlap;
+
         const chunks = [];
         let start = 0;
         while (start < total) {
@@ -455,26 +403,23 @@ document.addEventListener('DOMContentLoaded', () => {
     const mergeChunks = (chunks) => {
         if (chunks.length === 0) return '';
         if (chunks.length === 1) return chunks[0];
-        
-        // Smart merge to avoid overlap duplication
+
+        // Smart merge using the overlap value captured at split time
         const merged = [];
-        const overlap = parseInt(elements.splitting.overlapInput.value || '0', 10);
-        
+        const overlap = state.activeOverlap;
+
         for (let i = 0; i < chunks.length; i++) {
             const chunk = chunks[i];
             const lines = chunk.split('\n');
-            
+
             if (i === 0) {
-                // First chunk: include all lines
                 merged.push(...lines);
             } else {
-                // Subsequent chunks: skip overlap lines
                 const linesToSkip = Math.max(0, overlap);
-                const linesToInclude = lines.slice(linesToSkip);
-                merged.push(...linesToInclude);
+                merged.push(...lines.slice(linesToSkip));
             }
         }
-        
+
         return merged.join('\n');
     };
 
@@ -570,7 +515,7 @@ OUTPUT: Return the exact same structure with ALL text converted from ${sourceLan
         elements.translation.progressBar.setAttribute('aria-valuenow', String(pct));
     };
 
-    const callGoogle = async (apiKey, modelName, content) => {
+    const callGoogle = async (apiKey, modelName, content, signal) => {
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelName)}:generateContent?key=${encodeURIComponent(apiKey)}`;
         const body = {
             contents: [
@@ -584,7 +529,8 @@ OUTPUT: Return the exact same structure with ALL text converted from ${sourceLan
         const res = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
+            body: JSON.stringify(body),
+            signal
         });
         if (!res.ok) {
             const t = await res.text();
@@ -593,8 +539,7 @@ OUTPUT: Return the exact same structure with ALL text converted from ${sourceLan
         return res.json();
     };
 
-    const callOpenRouter = async (apiKey, modelName, content) => {
-        const url = 'https://openrouter.ai/api/v1/chat/completions';
+    const callChatCompletion = async (url, apiKey, modelName, content, signal) => {
         const body = {
             model: modelName,
             messages: [
@@ -608,38 +553,17 @@ OUTPUT: Return the exact same structure with ALL text converted from ${sourceLan
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${apiKey}`
             },
-            body: JSON.stringify(body)
+            body: JSON.stringify(body),
+            signal
         });
         if (!res.ok) {
             const t = await res.text();
-            throw new Error(`OpenRouter API error ${res.status}: ${t}`);
+            throw new Error(`API error ${res.status}: ${t}`);
         }
         return res.json();
     };
 
-    const callCerebras = async (apiKey, modelName, content) => {
-        const url = 'https://api.cerebras.ai/v1/chat/completions';
-        const body = {
-            model: modelName,
-            messages: [
-                { role: 'system', content: 'You are a helpful translation assistant.' },
-                { role: 'user', content }
-            ]
-        };
-        const res = await fetch(url, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKey}`
-            },
-            body: JSON.stringify(body)
-        });
-        if (!res.ok) {
-            const t = await res.text();
-            throw new Error(`Cerebras API error ${res.status}: ${t}`);
-        }
-        return res.json();
-    };
+    const API_TIMEOUT_MS = 120000; // 2 minutes per chunk
 
     const translateChunk = async (chunk, sourceLang, targetLang, instruction) => {
         const provider = elements.api.providerSelect.value;
@@ -648,7 +572,6 @@ OUTPUT: Return the exact same structure with ALL text converted from ${sourceLan
         if (!apiKey) throw new Error('API key not filled.');
         if (!modelName || modelName.trim() === '') throw new Error('Model name not filled.');
 
-        // Build robust translation prompt based on file format
         const prompt = buildRobustTranslationPrompt(chunk, sourceLang, targetLang, instruction);
 
         let translatedText = '';
@@ -657,64 +580,67 @@ OUTPUT: Return the exact same structure with ALL text converted from ${sourceLan
 
         while (retryCount <= maxRetries) {
             try {
-        if (provider === 'google') {
-            const data = await callGoogle(apiKey, modelName, prompt);
-            if (data && data.promptFeedback && data.promptFeedback.blockReason) {
-                if (data.promptFeedback.blockReason === 'PROHIBITED_CONTENT') {
-                            throw new Error('Translation failed: Content may violate usage policy. Please try with different text.');
-                        }
+                // Create a timeout that aborts if the API takes too long
+                const timeoutId = setTimeout(() => {
+                    if (state.abortController) state.abortController.abort();
+                }, API_TIMEOUT_MS);
+                const signal = state.abortController?.signal;
+
+                let data;
+                if (provider === 'google') {
+                    data = await callGoogle(apiKey, modelName, prompt, signal);
+                    clearTimeout(timeoutId);
+                    if (data?.promptFeedback?.blockReason === 'PROHIBITED_CONTENT') {
+                        throw new Error('Translation failed: Content may violate usage policy.');
                     }
                     translatedText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-                    if (!translatedText) throw new Error('Translation failed: API response is invalid or incomplete.');
-                }
-                else if (provider === 'openrouter') {
-                    const data = await callOpenRouter(apiKey, modelName, prompt);
+                } else if (provider === 'openrouter') {
+                    data = await callChatCompletion('https://openrouter.ai/api/v1/chat/completions', apiKey, modelName, prompt, signal);
+                    clearTimeout(timeoutId);
                     translatedText = data?.choices?.[0]?.message?.content;
-                    if (!translatedText) throw new Error('Translation failed: API response is invalid or incomplete.');
-                }
-                else if (provider === 'cerebras') {
-                    const data = await callCerebras(apiKey, modelName, prompt);
+                } else if (provider === 'cerebras') {
+                    data = await callChatCompletion('https://api.cerebras.ai/v1/chat/completions', apiKey, modelName, prompt, signal);
+                    clearTimeout(timeoutId);
                     translatedText = data?.choices?.[0]?.message?.content;
-                    if (!translatedText) throw new Error('Translation failed: API response is invalid or incomplete.');
-                }
-                else {
+                } else {
+                    clearTimeout(timeoutId);
                     throw new Error('Unknown provider.');
                 }
 
-                // Validate translation quality
-                if (translatedText && translatedText.trim()) {
-                    // Check if translation actually changed the language (basic validation)
-                    const originalWords = chunk.split(/\s+/).filter(word => word.length > 2).slice(0, 5);
-                    const translatedWords = translatedText.split(/\s+/).filter(word => word.length > 2).slice(0, 5);
-                    
-                    // If too many words are identical, translation might have failed
-                    const identicalWords = originalWords.filter(word => 
-                        translatedWords.some(tWord => tWord.toLowerCase() === word.toLowerCase())
-                    );
-                    
-                    if (identicalWords.length >= originalWords.length * 0.8) {
-                        if (retryCount < maxRetries) {
-                            retryCount++;
-                            log(`Translation quality check failed for chunk, retrying (${retryCount}/${maxRetries})...`);
-                            await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retry
-                            continue;
-                        } else {
-                            log(`Warning: Translation may not have changed language significantly for this chunk.`);
-                        }
+                if (!translatedText) throw new Error('Translation failed: API response is invalid or incomplete.');
+
+                // Validate translation quality - sample more words for reliability
+                const originalWords = chunk.split(/\s+/).filter(w => w.length > 3).slice(0, 10);
+                const translatedWords = translatedText.split(/\s+/).filter(w => w.length > 3).slice(0, 10);
+
+                if (originalWords.length > 0) {
+                    const identicalCount = originalWords.filter(w =>
+                        translatedWords.some(tw => tw.toLowerCase() === w.toLowerCase())
+                    ).length;
+
+                    if (identicalCount >= originalWords.length * 0.8 && retryCount < maxRetries) {
+                        retryCount++;
+                        log(`Quality check failed, retrying (${retryCount}/${maxRetries})...`);
+                        await new Promise(r => setTimeout(r, 1000));
+                        continue;
+                    } else if (identicalCount >= originalWords.length * 0.8) {
+                        log('Warning: Translation may not have changed language significantly.');
                     }
                 }
 
                 return translatedText;
 
             } catch (error) {
+                if (error.name === 'AbortError') {
+                    throw new Error(state.translationAborted ? 'Translation cancelled by user.' : 'API request timed out. Try again or use a different model.');
+                }
                 if (retryCount < maxRetries) {
                     retryCount++;
                     log(`Translation failed, retrying (${retryCount}/${maxRetries}): ${error.message}`);
-                    await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds before retry
+                    await new Promise(r => setTimeout(r, 2000));
                     continue;
-                } else {
-                    throw error;
                 }
+                throw error;
             }
         }
 
@@ -723,18 +649,21 @@ OUTPUT: Return the exact same structure with ALL text converted from ${sourceLan
 
     const startTranslation = async () => {
         errorHandling.hide();
+        if (state.isTranslating) return; // Prevent double-click
         if (!state.uploadedFileContent) {
-            errorHandling.show('Please upload a .txt file first.');
+            errorHandling.show('Please upload a file first.');
             return;
         }
         const sourceLang = getLanguageValue('source');
         const targetLang = getLanguageValue('target');
         let instruction = elements.instruction.customTextarea.value.trim();
         if (!instruction || elements.instruction.useDefaultCheckbox.checked) {
-            instruction = 'Translate the following text completely, naturally and accurately. Maintain the original formatting, tone, and context. For technical terms, provide appropriate translations while keeping important keywords recognizable. AND Please keep the kinship terms and honorifics in the translation, and write them in romaji.';
+            instruction = DEFAULT_INSTRUCTION;
         }
 
         state.translationAborted = false;
+        state.isTranslating = true;
+        state.abortController = new AbortController();
         elements.translation.startBtn.disabled = true;
         elements.translation.stopBtn.disabled = false;
         log('Starting translation process...');
@@ -746,29 +675,29 @@ OUTPUT: Return the exact same structure with ALL text converted from ${sourceLan
 
         for (let i = 0; i < originalChunks.length; i++) {
             if (state.translationAborted) {
-                log('Dibatalkan oleh pengguna.');
+                log('Cancelled by user.');
                 break;
             }
             const chunk = originalChunks[i];
             const startTime = Date.now();
             log(`Translating chunk ${i + 1}/${originalChunks.length}...`);
-            
-            // Start streaming indicator
+
+            // Streaming indicator — update progress text inline instead of spamming log
             const streamingInterval = setInterval(() => {
                 const elapsed = Math.floor((Date.now() - startTime) / 1000);
-                log(`⏳ Chunk ${i + 1} still processing... (${elapsed}s elapsed)`);
-            }, 3000); // Update every 3 seconds
-            
+                elements.translation.progressText.textContent =
+                    `${Math.round((i / originalChunks.length) * 100)}% — Chunk ${i + 1} (${elapsed}s)`;
+            }, 3000);
+
             try {
-                // Show processing state
                 updateProgress(i, originalChunks.length, true);
-                
+
                 const translated = await translateChunk(chunk, sourceLang, targetLang, instruction);
                 clearInterval(streamingInterval);
-                
+
                 const totalTime = Math.floor((Date.now() - startTime) / 1000);
-                log(`✅ Chunk ${i + 1} completed in ${totalTime}s`);
-                
+                log(`Chunk ${i + 1} completed in ${totalTime}s`);
+
                 state.translatedChunks[i] = translated;
                 elements.preview.originalText.textContent = chunk;
                 elements.preview.translatedText.textContent = translated;
@@ -776,7 +705,7 @@ OUTPUT: Return the exact same structure with ALL text converted from ${sourceLan
             } catch (err) {
                 clearInterval(streamingInterval);
                 errorHandling.show(err.message || 'An error occurred during translation.');
-                log(`❌ Error on chunk ${i + 1}: ${err.message || err}`);
+                log(`Error on chunk ${i + 1}: ${err.message || err}`);
                 break;
             }
         }
@@ -786,18 +715,21 @@ OUTPUT: Return the exact same structure with ALL text converted from ${sourceLan
             const merged = mergeChunks(state.translatedChunks.filter(Boolean));
             elements.preview.translatedText.textContent = merged;
             log('Translation completed.');
-        } else {
+        } else if (!state.translationAborted) {
             log('No translation results to display.');
         }
+        state.isTranslating = false;
+        state.abortController = null;
         elements.translation.startBtn.disabled = false;
         elements.translation.stopBtn.disabled = true;
     };
 
     const stopTranslation = () => {
         state.translationAborted = true;
+        if (state.abortController) state.abortController.abort();
         elements.translation.startBtn.disabled = false;
         elements.translation.stopBtn.disabled = true;
-        log('Translation process requested to stop.');
+        log('Translation cancelled.');
     };
 
     const handleDownloadSingle = () => {
@@ -853,8 +785,8 @@ OUTPUT: Return the exact same structure with ALL text converted from ${sourceLan
             const originalFileName = state.uploadedFileName || 'original.txt';
             zip.file(originalFileName, state.uploadedFileContent);
 
-            // Add translated file
-            const translatedContent = state.translatedChunks.filter(Boolean).join('\n\n');
+            // Add translated file (use same merge logic as preview)
+            const translatedContent = mergeChunks(state.translatedChunks.filter(Boolean));
             const targetLang = getLanguageValue('target');
             const languageSuffix = getLanguageSuffix(targetLang);
             
