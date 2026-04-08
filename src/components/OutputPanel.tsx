@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
 import { FileText, Download, Copy, Maximize2 } from 'lucide-react'
 import { downloadSingleFile, downloadZip, generateTranslatedFilename, copyToClipboard } from '../lib/download'
 import { useState } from 'react'
+import { LargeTextPreview } from './LargeTextPreview'
 
 interface OutputPanelProps {
   onExpandPreview: () => void
@@ -14,8 +15,7 @@ export function OutputPanel({ onExpandPreview }: OutputPanelProps) {
   const [copySuccess, setCopySuccess] = useState(false)
 
   const hasOutput = state.translationOutput.length > 0
-  const originalChunks = state.activeRun?.chunks.map(c => c.original) || []
-  const translatedChunks = state.activeRun?.chunks.map(c => c.translatedCore) || []
+  const totalChunks = state.activeRun?.chunks.length || 0
 
   const handleCopy = async () => {
     const success = await copyToClipboard(state.translationOutput)
@@ -40,7 +40,7 @@ export function OutputPanel({ onExpandPreview }: OutputPanelProps) {
   }
 
   const handleDownloadZip = async () => {
-    if (!state.file || translatedChunks.length === 0) return
+    if (!state.file || totalChunks === 0) return
 
     const targetLang = state.draft?.targetLanguage || 'en'
     const originalName = state.file.name
@@ -58,7 +58,7 @@ export function OutputPanel({ onExpandPreview }: OutputPanelProps) {
         sourceLanguage: state.draft?.sourceLanguage || 'auto',
         targetLanguage: targetLang,
         translationDate: new Date().toISOString(),
-        totalChunks: translatedChunks.length,
+        totalChunks,
         provider: state.draft?.providerPreset || state.draft?.providerProtocol,
         model: state.draft?.model,
       },
@@ -77,15 +77,19 @@ export function OutputPanel({ onExpandPreview }: OutputPanelProps) {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <h4 className="text-sm font-medium mb-2">Original</h4>
-            <pre className="p-3 bg-muted rounded-md text-xs overflow-auto max-h-64 break-all whitespace-pre-wrap">
-              {state.file?.content || 'Nothing loaded yet.'}
-            </pre>
+            <LargeTextPreview
+              text={state.file?.content || ''}
+              emptyMessage="Nothing loaded yet."
+              className="p-3 bg-muted rounded-md text-xs overflow-auto max-h-64 whitespace-pre-wrap"
+            />
           </div>
           <div>
             <h4 className="text-sm font-medium mb-2">Translated</h4>
-            <pre className="p-3 bg-muted rounded-md text-xs overflow-auto max-h-64 break-all whitespace-pre-wrap">
-              {state.translationOutput || 'No translation yet.'}
-            </pre>
+            <LargeTextPreview
+              text={state.translationOutput}
+              emptyMessage="No translation yet."
+              className="p-3 bg-muted rounded-md text-xs overflow-auto max-h-64 whitespace-pre-wrap"
+            />
           </div>
         </div>
 
@@ -111,7 +115,7 @@ export function OutputPanel({ onExpandPreview }: OutputPanelProps) {
           <Button 
             variant="ghost"
             size="sm"
-            disabled={!hasOutput || translatedChunks.length === 0}
+            disabled={!hasOutput || totalChunks === 0}
             onClick={handleDownloadZip}
           >
             <Download className="h-4 w-4 mr-1" />

@@ -38,7 +38,9 @@ function App() {
           </a>
         </footer>
 
-        <PreviewModal open={previewOpen} onOpenChange={setPreviewOpen} />
+        {previewOpen && (
+          <PreviewModal open={previewOpen} onOpenChange={setPreviewOpen} />
+        )}
       </AppProvider>
     </ThemeProvider>
   )

@@ -22,6 +22,7 @@ export interface TranslationProgress {
 }
 
 export interface TranslationCallbacks {
+  onRunUpdate?: (run: ActiveRun | null) => void;
   onChunkStart: (index: number) => void;
   onChunkComplete: (index: number, result: string) => void;
   onChunkError: (index: number, error: string) => void;
@@ -73,18 +74,79 @@ function isRateLimitError(error: unknown): boolean {
   return false;
 }
 
+function notifyRunUpdate(run: ActiveRun, callbacks: TranslationCallbacks): void {
+  callbacks.onRunUpdate?.(run);
+}
+
+function getCompletedChunkCount(run: ActiveRun): number {
+  return run.chunks.filter(
+    (chunk) => chunk.status === 'success' || chunk.status === 'truncated'
+  ).length;
+}
+
+function updateRunProgress(
+  run: ActiveRun,
+  callbacks: TranslationCallbacks,
+  runningChunks: number[],
+  concurrency: number
+): void {
+  run.processedChunks = getCompletedChunkCount(run);
+
+  const elapsedSeconds = run.startedAt
+    ? Math.floor((Date.now() - run.startedAt) / 1000)
+    : 0;
+  const averageChunkTime = run.processedChunks > 0
+    ? elapsedSeconds / run.processedChunks
+    : null;
+  const remainingChunks = Math.max(0, run.totalChunks - run.processedChunks);
+  const etaSeconds = averageChunkTime === null
+    ? null
+    : Math.round((averageChunkTime * remainingChunks) / Math.max(1, concurrency));
+
+  run.progress = {
+    percent: Math.round((run.processedChunks / Math.max(run.totalChunks, 1)) * 100),
+    elapsedSeconds,
+    averageChunkTime,
+    etaSeconds,
+  };
+
+  callbacks.onProgress({
+    currentChunk: run.processedChunks,
+    totalChunks: run.totalChunks,
+    percent: run.progress.percent,
+    runningChunks,
+    completedChunks: run.processedChunks,
+    etaSeconds,
+  });
+}
+
+function persistRun(run: ActiveRun, callbacks: TranslationCallbacks): void {
+  saveActiveRun(run);
+  notifyRunUpdate(run, callbacks);
+}
+
+type ChunkResult =
+  | { success: true; translatedText: string }
+  | { success: false; error: string };
+
+type WaveOutcome = 'success' | 'paused' | 'failed' | 'fallback_to_sequential';
+
+interface WaveResult {
+  outcome: WaveOutcome;
+}
+
 // Run single chunk with timeout and retry logic
 async function runSingleChunk(
+  run: ActiveRun,
   chunkIndex: number,
-  chunkRecord: ChunkRecord,
   file: FileState,
   chunkConfig: ChunkConfig,
   draft: DraftSettings,
   providerConfig: ProviderConfig,
   callbacks: TranslationCallbacks,
   abortSignal: AbortSignal
-): Promise<{ success: boolean; translatedText?: string; error?: string }> {
-  
+): Promise<ChunkResult> {
+  const chunkRecord = run.chunks[chunkIndex];
   const maxRetries = draft.refusalRecoveryEnabled ? 2 : 0;
   let attempt = 0;
 
@@ -96,6 +158,8 @@ async function runSingleChunk(
     try {
       chunkRecord.status = 'running';
       chunkRecord.startTime = Date.now();
+      chunkRecord.error = null;
+      notifyRunUpdate(run, callbacks);
       
       callbacks.onChunkStart(chunkIndex);
       addSessionLog(`Chunk ${chunkIndex + 1}: API call started (attempt ${attempt + 1})`, 'info');
@@ -118,6 +182,7 @@ async function runSingleChunk(
       if (abortSignal.aborted) {
         chunkRecord.status = 'pending';
         chunkRecord.startTime = null;
+        notifyRunUpdate(run, callbacks);
         return { success: false, error: 'Aborted' };
       }
 
@@ -128,6 +193,8 @@ async function runSingleChunk(
         chunkRecord.error = 'Output was truncated due to length limits.';
         chunkRecord.translatedCore = translatedText;
         chunkRecord.endTime = Date.now();
+        chunkRecord.retryCount = attempt;
+        notifyRunUpdate(run, callbacks);
         addSessionLog(`Chunk ${chunkIndex + 1}: truncated`, 'warning');
         callbacks.onChunkError(chunkIndex, chunkRecord.error);
         return { success: true, translatedText };
@@ -135,6 +202,9 @@ async function runSingleChunk(
         chunkRecord.status = 'success';
         chunkRecord.translatedCore = translatedText;
         chunkRecord.endTime = Date.now();
+        chunkRecord.retryCount = attempt;
+        chunkRecord.error = null;
+        notifyRunUpdate(run, callbacks);
         addSessionLog(`Chunk ${chunkIndex + 1}: completed in ${((chunkRecord.endTime - chunkRecord.startTime) / 1000).toFixed(1)}s`, 'info');
         callbacks.onChunkComplete(chunkIndex, translatedText);
         return { success: true, translatedText };
@@ -145,6 +215,7 @@ async function runSingleChunk(
       if (abortSignal.aborted || (error instanceof DOMException && error.name === 'AbortError')) {
         chunkRecord.status = 'pending';
         chunkRecord.startTime = null;
+        notifyRunUpdate(run, callbacks);
         return { success: false, error: 'Aborted' };
       }
 
@@ -169,6 +240,7 @@ async function runSingleChunk(
       chunkRecord.endTime = Date.now();
       chunkRecord.retryCount = attempt;
 
+      notifyRunUpdate(run, callbacks);
       addSessionLog(`Chunk ${chunkIndex + 1}: failed - ${errorMessage}`, 'error');
       callbacks.onChunkError(chunkIndex, errorMessage);
       
@@ -189,28 +261,32 @@ async function runWave(
   providerConfig: ProviderConfig,
   callbacks: TranslationCallbacks,
   abortSignal: AbortSignal
-): Promise<{ success: boolean; fallbackToSequential?: boolean }> {
+): Promise<WaveResult> {
   
-  if (chunkIndices.length === 0) return { success: true };
+  if (chunkIndices.length === 0) {
+    return { outcome: 'success' };
+  }
 
   const waveIndex = Math.floor(chunkIndices[0] / chunkConfig.maxParallelChunks) + 1;
   const totalWaves = Math.ceil(run.chunks.length / chunkConfig.maxParallelChunks);
   
+  // Mark all chunks as running
+  chunkIndices.forEach((idx) => {
+    run.chunks[idx].status = 'running';
+    run.chunks[idx].startTime = Date.now();
+    run.chunks[idx].error = null;
+  });
+  updateRunProgress(run, callbacks, chunkIndices, chunkIndices.length);
+  notifyRunUpdate(run, callbacks);
+
   addSessionLog(`Wave ${waveIndex}/${totalWaves}: Starting chunks ${chunkIndices.map(i => i + 1).join(', ')}`, 'info');
   callbacks.onWaveStart?.(waveIndex, chunkIndices);
 
-  // Mark all chunks as running
-  chunkIndices.forEach(idx => {
-    run.chunks[idx].status = 'running';
-    run.chunks[idx].startTime = Date.now();
-  });
-  saveActiveRun(run);
-
   // Execute all chunks in parallel
-  const promises = chunkIndices.map(idx =>
+  const promises = chunkIndices.map((idx) =>
     runSingleChunk(
+      run,
       idx,
-      run.chunks[idx],
       file,
       chunkConfig,
       draft,
@@ -228,8 +304,7 @@ async function runWave(
   let successCount = 0;
   let failCount = 0;
 
-  results.forEach((result, idx) => {
-    const chunkIdx = chunkIndices[idx];
+  results.forEach((result) => {
     if (result.status === 'fulfilled') {
       if (result.value.success) {
         successCount++;
@@ -247,53 +322,27 @@ async function runWave(
     }
   });
 
-  // Update progress
-  run.processedChunks = run.chunks.filter(
-    c => c.status === 'success' || c.status === 'truncated'
-  ).length;
-  
-  const elapsed = Math.floor((Date.now() - run.startedAt!) / 1000);
-  const avgChunkTime = elapsed / Math.max(run.processedChunks, 1);
-  const remaining = run.totalChunks - run.processedChunks;
-  const etaSeconds = Math.round(avgChunkTime * remaining / chunkConfig.maxParallelChunks);
-
-  run.progress = {
-    percent: Math.round((run.processedChunks / run.totalChunks) * 100),
-    elapsedSeconds: elapsed,
-    averageChunkTime: avgChunkTime,
-    etaSeconds,
-  };
-
-  saveActiveRun(run);
-  callbacks.onProgress({
-    currentChunk: run.processedChunks,
-    totalChunks: run.totalChunks,
-    percent: run.progress.percent,
-    runningChunks: [],
-    completedChunks: run.processedChunks,
-    etaSeconds,
-  });
-
+  updateRunProgress(run, callbacks, [], chunkConfig.maxParallelChunks);
+  persistRun(run, callbacks);
   callbacks.onWaveComplete?.(waveIndex);
   addSessionLog(`Wave ${waveIndex}: Completed (${successCount} success, ${failCount} fail, ${abortCount} abort)`, 'info');
+
+  if (abortCount > 0 && failCount === 0) {
+    return { outcome: 'paused' };
+  }
 
   // If majority failed due to rate limit, suggest fallback
   if (rateLimitCount >= chunkIndices.length / 2) {
     addSessionLog(`Wave ${waveIndex}: Multiple rate limits detected, suggesting fallback to sequential`, 'warning');
-    return { success: failCount === 0, fallbackToSequential: true };
+    return { outcome: 'fallback_to_sequential' };
   }
 
   // If any chunk failed (not just rate limit), stop
   if (failCount > 0) {
-    return { success: false };
+    return { outcome: 'failed' };
   }
 
-  // If all aborted, stop
-  if (abortCount === chunkIndices.length) {
-    return { success: false };
-  }
-
-  return { success: true };
+  return { outcome: 'success' };
 }
 
 // Sequential fallback for rate-limited scenarios
@@ -306,20 +355,18 @@ async function runSequential(
   providerConfig: ProviderConfig,
   callbacks: TranslationCallbacks,
   abortSignal: AbortSignal
-): Promise<boolean> {
+): Promise<'success' | 'paused' | 'failed'> {
   
   addSessionLog('Switching to sequential mode due to rate limiting', 'warning');
   
   const totalChunks = run.chunks.length;
-  const startTime = Date.now();
-  let processedThisSession = 0;
 
   for (let i = startIndex; i < totalChunks; i++) {
     if (abortSignal.aborted) {
       run.status = 'paused';
-      saveActiveRun(run);
+      persistRun(run, callbacks);
       addSessionLog('Translation paused by user', 'warning');
-      return false;
+      return 'paused';
     }
 
     const chunkRecord = run.chunks[i];
@@ -327,9 +374,10 @@ async function runSequential(
       continue;
     }
 
+    updateRunProgress(run, callbacks, [i], 1);
     const result = await runSingleChunk(
+      run,
       i,
-      chunkRecord,
       file,
       chunkConfig,
       draft,
@@ -341,49 +389,26 @@ async function runSequential(
     if (!result.success) {
       if (result.error === 'Aborted') {
         run.status = 'paused';
-        saveActiveRun(run);
-        return false;
+        persistRun(run, callbacks);
+        return 'paused';
       }
 
       // Check for retries
       if (chunkConfig.refusalRecoveryEnabled && chunkRecord.retryCount < 2) {
         chunkRecord.retryCount++;
         addSessionLog(`Retrying chunk ${i + 1} (${chunkRecord.retryCount}/2)...`, 'warning');
-        saveActiveRun(run);
+        notifyRunUpdate(run, callbacks);
         i--;
         continue;
       }
 
       run.status = 'failed';
-      saveActiveRun(run);
+      persistRun(run, callbacks);
       callbacks.onError(result.error || 'Chunk failed');
-      return false;
+      return 'failed';
     }
 
-    processedThisSession++;
-
-    // Update progress
-    const elapsed = Math.floor((Date.now() - startTime) / 1000);
-    const avgChunkTime = elapsed / Math.max(processedThisSession, 1);
-    const remaining = totalChunks - i - 1;
-    const etaSeconds = Math.round(avgChunkTime * remaining);
-
-    run.progress = {
-      percent: Math.round(((i + 1) / totalChunks) * 100),
-      elapsedSeconds: elapsed,
-      averageChunkTime: avgChunkTime,
-      etaSeconds,
-    };
-
-    saveActiveRun(run);
-    callbacks.onProgress({
-      currentChunk: i + 1,
-      totalChunks,
-      percent: run.progress.percent,
-      runningChunks: [],
-      completedChunks: i + 1,
-      etaSeconds,
-    });
+    updateRunProgress(run, callbacks, [], 1);
 
     // Small delay antar chunk dalam sequential mode
     if (i < totalChunks - 1) {
@@ -391,7 +416,7 @@ async function runSequential(
     }
   }
 
-  return true;
+  return 'success';
 }
 
 // Main chunk runner dengan parallel waves
@@ -434,19 +459,36 @@ async function runChunks(
 
   addSessionLog(`Created ${waves.length} waves for ${totalChunks - startIndex} remaining chunks`, 'info');
 
-  let useSequential = false;
+  for (let waveIndex = 0; waveIndex < waves.length; waveIndex++) {
+    const wave = waves[waveIndex];
 
-  for (const wave of waves) {
     if (abortSignal.aborted) {
       run.status = 'paused';
-      saveActiveRun(run);
+      persistRun(run, callbacks);
       addSessionLog('Translation paused by user', 'warning');
       return;
     }
 
-    if (useSequential) {
-      // Continue with sequential
-      const success = await runSequential(
+    const result = await runWave(
+      run,
+      wave,
+      file,
+      chunkConfig,
+      draft,
+      providerConfig,
+      callbacks,
+      abortSignal
+    );
+
+    if (result.outcome === 'paused') {
+      run.status = 'paused';
+      persistRun(run, callbacks);
+      addSessionLog('Translation paused by user', 'warning');
+      return;
+    }
+
+    if (result.outcome === 'fallback_to_sequential') {
+      const sequentialResult = await runSequential(
         run,
         wave[0],
         file,
@@ -456,47 +498,24 @@ async function runChunks(
         callbacks,
         abortSignal
       );
-      if (!success) return;
-    } else {
-      // Try parallel
-      const result = await runWave(
-        run,
-        wave,
-        file,
-        chunkConfig,
-        draft,
-        providerConfig,
-        callbacks,
-        abortSignal
+      if (sequentialResult !== 'success') {
+        return;
+      }
+      break;
+    }
+
+    if (result.outcome === 'failed') {
+      run.status = 'failed';
+      persistRun(run, callbacks);
+      callbacks.onError(
+        run.chunks.find((chunk) => chunk.status === 'failed')?.error || 'Chunk failed'
       );
+      return;
+    }
 
-      if (!result.success) {
-        if (result.fallbackToSequential) {
-          useSequential = true;
-          // Continue this wave with sequential
-          const seqSuccess = await runSequential(
-            run,
-            wave[0],
-            file,
-            chunkConfig,
-            draft,
-            providerConfig,
-            callbacks,
-            abortSignal
-          );
-          if (!seqSuccess) return;
-        } else {
-          // Real error, stop
-          run.status = 'failed';
-          saveActiveRun(run);
-          return;
-        }
-      }
-
-      // Small delay antar wave untuk menghindari rate limit
-      if (waves.indexOf(wave) < waves.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, WAVE_DELAY_MS));
-      }
+    // Small delay antar wave untuk menghindari rate limit
+    if (waveIndex < waves.length - 1) {
+      await new Promise(resolve => setTimeout(resolve, WAVE_DELAY_MS));
     }
   }
 
@@ -509,12 +528,11 @@ async function runChunks(
 
   run.status = 'completed';
   run.completedAt = Date.now();
+  updateRunProgress(run, callbacks, [], 1);
   run.progress.percent = 100;
-  run.processedChunks = run.chunks.filter(
-    c => c.status === 'success' || c.status === 'truncated'
-  ).length;
+  run.progress.etaSeconds = 0;
 
-  saveActiveRun(run);
+  persistRun(run, callbacks);
   addSessionLog('Translation completed', 'info');
   callbacks.onComplete(finalOutput);
 }

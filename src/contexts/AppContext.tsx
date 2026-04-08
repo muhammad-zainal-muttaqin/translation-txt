@@ -8,11 +8,11 @@ import type {
   WorkspacePanelId,
   LogEntry,
   ValidationIssue,
-  ChunkRecord,
 } from '../types'
 import { DEFAULT_INSTRUCTION } from '../types'
 import { startTranslation, pauseTranslation, cancelTranslation, discardActiveRun as discardRun, resumeTranslation } from '../lib/translate'
-import { loadSettings, loadActiveRun, saveActiveRun, getSessionLogs, addSessionLog, normalizeRunOnLoad, subscribeToSessionLogs } from '../lib/storage'
+import { mergeChunks } from '../lib/chunker'
+import { loadSettings, loadActiveRun, saveActiveRun, saveSettings, getSessionLogs, addSessionLog, normalizeRunOnLoad, subscribeToSessionLogs } from '../lib/storage'
 
 // Default draft factory - defined early for use in initialState
 function createDefaultDraft(): DraftSettings {
@@ -48,8 +48,6 @@ interface AppState {
   draft: DraftSettings
   file: FileState | null
   chunkConfig: ChunkConfig | null
-  originalChunks: string[]
-  translatedChunks: string[]
   translationOutput: string
   filePreflightIssues: ValidationIssue[]
   finalValidationIssues: ValidationIssue[]
@@ -72,8 +70,6 @@ type AppAction =
   | { type: 'SET_DRAFT'; payload: DraftSettings | null }
   | { type: 'SET_FILE'; payload: FileState | null }
   | { type: 'SET_CHUNK_CONFIG'; payload: ChunkConfig | null }
-  | { type: 'SET_ORIGINAL_CHUNKS'; payload: string[] }
-  | { type: 'SET_TRANSLATED_CHUNKS'; payload: string[] }
   | { type: 'SET_TRANSLATION_OUTPUT'; payload: string }
   | { type: 'SET_FILE_PREFLIGHT_ISSUES'; payload: ValidationIssue[] }
   | { type: 'SET_FINAL_VALIDATION_ISSUES'; payload: ValidationIssue[] }
@@ -82,9 +78,29 @@ type AppAction =
   | { type: 'SET_ACTIVE_PANEL'; payload: WorkspacePanelId }
   | { type: 'ADD_LOG'; payload: LogEntry }
   | { type: 'SET_PROGRESS'; payload: { percent: number; currentChunk: number; totalChunks: number; runningChunks: number[]; completedChunks: number; etaSeconds: number | null } }
-  | { type: 'UPDATE_CHUNK'; payload: { index: number; chunk: ChunkRecord } }
   | { type: 'SET_LOGS'; payload: LogEntry[] }
   | { type: 'RESET' }
+
+const COMPLETED_RUN_STATUSES = new Set(['completed', 'completed-review-required'])
+
+function getSanitizedRememberedDraft(draft: DraftSettings): DraftSettings {
+  return {
+    ...draft,
+    apiKey: draft.rememberOnDevice ? draft.apiKey : '',
+  }
+}
+
+function getTranslationOutputFromRun(run: ActiveRun | null): string {
+  if (!run || !COMPLETED_RUN_STATUSES.has(run.status)) {
+    return ''
+  }
+
+  return mergeChunks(
+    run.chunks.map((chunk) => chunk.translatedCore),
+    run.config.overlapLines,
+    run.file.format
+  )
+}
 
 function loadInitialState(): AppState {
   const settings = loadSettings()
@@ -104,15 +120,14 @@ function loadInitialState(): AppState {
 
   // Ensure we always have a valid draft, never null
   const draft = settings.rememberedDraft || createDefaultDraft()
+  const translationOutput = getTranslationOutputFromRun(activeRun)
   
   return {
     settings,
     draft,
     file: activeRun?.file || null,
     chunkConfig: activeRun?.config || null,
-    originalChunks: activeRun?.chunks.map(c => c.original) || [],
-    translatedChunks: activeRun?.chunks.map(c => c.translatedCore) || [],
-    translationOutput: '',
+    translationOutput,
     filePreflightIssues: [],
     finalValidationIssues: activeRun?.finalValidationIssues || [],
     isTranslating: false,
@@ -134,17 +149,21 @@ function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
     case 'SET_SETTINGS':
       return { ...state, settings: action.payload }
-    case 'SET_DRAFT':
-      // Never allow null draft - use default if null
-      return { ...state, draft: action.payload || createDefaultDraft() }
+    case 'SET_DRAFT': {
+      const draft = action.payload || createDefaultDraft()
+      return {
+        ...state,
+        draft,
+        settings: {
+          ...state.settings,
+          rememberedDraft: getSanitizedRememberedDraft(draft),
+        },
+      }
+    }
     case 'SET_FILE':
       return { ...state, file: action.payload }
     case 'SET_CHUNK_CONFIG':
       return { ...state, chunkConfig: action.payload }
-    case 'SET_ORIGINAL_CHUNKS':
-      return { ...state, originalChunks: action.payload }
-    case 'SET_TRANSLATED_CHUNKS':
-      return { ...state, translatedChunks: action.payload }
     case 'SET_TRANSLATION_OUTPUT':
       return { ...state, translationOutput: action.payload }
     case 'SET_FILE_PREFLIGHT_ISSUES':
@@ -166,7 +185,11 @@ function appReducer(state: AppState, action: AppAction): AppState {
     case 'SET_PROGRESS':
       return { ...state, progress: action.payload }
     case 'RESET':
-      return { ...initialState, settings: state.settings }
+      return {
+        ...initialState,
+        settings: state.settings,
+        draft: state.settings.rememberedDraft || createDefaultDraft(),
+      }
     default:
       return state
   }
@@ -182,8 +205,6 @@ const initialState: AppState = {
   draft: createDefaultDraft(), // Never null
   file: null,
   chunkConfig: null,
-  originalChunks: [],
-  translatedChunks: [],
   translationOutput: '',
   filePreflightIssues: [],
   finalValidationIssues: [],
@@ -220,15 +241,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(appReducer, initialState, loadInitialState)
   const abortControllerRef = useRef<AbortController | null>(null)
 
+  const syncRunState = useCallback((run: ActiveRun | null) => {
+    dispatch({ type: 'SET_ACTIVE_RUN', payload: run })
+    dispatch({ type: 'SET_FINAL_VALIDATION_ISSUES', payload: run?.finalValidationIssues || [] })
+
+    if (run && COMPLETED_RUN_STATUSES.has(run.status)) {
+      dispatch({ type: 'SET_TRANSLATION_OUTPUT', payload: getTranslationOutputFromRun(run) })
+    }
+  }, [])
+
   useEffect(() => {
     return subscribeToSessionLogs((entry) => {
       dispatch({ type: 'ADD_LOG', payload: entry })
     })
   }, [])
 
+  useEffect(() => {
+    saveSettings(state.settings)
+  }, [state.settings])
+
   const actions = {
     startTranslation: useCallback(async () => {
-      if (!state.file || !state.draft) {
+      if (!state.file) {
         addSessionLog('File or draft not configured', 'error')
         return
       }
@@ -244,18 +278,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
             abortSignal: abortControllerRef.current.signal,
           },
           {
-            onChunkStart: (index) => {
-              const run = loadActiveRun()
-              if (run) {
-                dispatch({ type: 'SET_ACTIVE_RUN', payload: run })
-              }
-            },
-            onChunkComplete: (index, _result) => {
-              const run = loadActiveRun()
-              if (run) {
-                dispatch({ type: 'SET_ACTIVE_RUN', payload: run })
-              }
-            },
+            onRunUpdate: syncRunState,
+            onChunkStart: () => {},
+            onChunkComplete: () => {},
             onChunkError: (index, error) => {
               addSessionLog('Chunk ' + (index + 1) + ' error: ' + error, 'error')
             },
@@ -274,27 +299,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
             },
             onWaveStart: (waveIndex, chunkIndices) => {
               addSessionLog(`Wave ${waveIndex}: Processing chunks ${chunkIndices.map(i => i + 1).join(', ')}`, 'info')
-              dispatch({
-                type: 'SET_PROGRESS',
-                payload: {
-                  ...state.progress,
-                  runningChunks: chunkIndices,
-                },
-              })
             },
-            onWaveComplete: (waveIndex) => {
-              const run = loadActiveRun()
-              if (run) {
-                dispatch({ type: 'SET_ACTIVE_RUN', payload: run })
-              }
-            },
+            onWaveComplete: () => {},
             onComplete: (output) => {
               dispatch({ type: 'SET_TRANSLATION_OUTPUT', payload: output })
               addSessionLog('Translation completed', 'info')
-              const run = loadActiveRun()
-              if (run) {
-                dispatch({ type: 'SET_ACTIVE_RUN', payload: run })
-              }
             },
             onError: (error) => {
               addSessionLog('Translation error: ' + error, 'error')
@@ -308,10 +317,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         dispatch({ type: 'SET_IS_TRANSLATING', payload: false })
         abortControllerRef.current = null
       }
-    }, [state.file, state.draft]),
+    }, [state.file, state.draft, syncRunState]),
 
     resumeTranslation: useCallback(async () => {
-      if (!state.activeRun || !state.draft) {
+      if (!state.activeRun) {
         addSessionLog('No paused run or draft to resume', 'error')
         return
       }
@@ -327,18 +336,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
             abortSignal: abortControllerRef.current.signal,
           },
           {
-            onChunkStart: (_index) => {
-              const run = loadActiveRun()
-              if (run) {
-                dispatch({ type: 'SET_ACTIVE_RUN', payload: run })
-              }
-            },
-            onChunkComplete: (_index, _result) => {
-              const run = loadActiveRun()
-              if (run) {
-                dispatch({ type: 'SET_ACTIVE_RUN', payload: run })
-              }
-            },
+            onRunUpdate: syncRunState,
+            onChunkStart: () => {},
+            onChunkComplete: () => {},
             onChunkError: (_index, _error) => {},
             onProgress: (progress) => {
               dispatch({
@@ -355,26 +355,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
             },
             onWaveStart: (waveIndex, chunkIndices) => {
               addSessionLog(`Wave ${waveIndex}: Resuming chunks ${chunkIndices.map(i => i + 1).join(', ')}`, 'info')
-              dispatch({
-                type: 'SET_PROGRESS',
-                payload: {
-                  ...state.progress,
-                  runningChunks: chunkIndices,
-                },
-              })
             },
-            onWaveComplete: (waveIndex) => {
-              const run = loadActiveRun()
-              if (run) {
-                dispatch({ type: 'SET_ACTIVE_RUN', payload: run })
-              }
-            },
+            onWaveComplete: () => {},
             onComplete: (output) => {
               dispatch({ type: 'SET_TRANSLATION_OUTPUT', payload: output })
-              const run = loadActiveRun()
-              if (run) {
-                dispatch({ type: 'SET_ACTIVE_RUN', payload: run })
-              }
             },
             onError: (error) => {
               addSessionLog('Translation error: ' + error, 'error')
@@ -387,12 +371,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       } finally {
         dispatch({ type: 'SET_IS_TRANSLATING', payload: false })
         abortControllerRef.current = null
-        const run = loadActiveRun()
-        if (run) {
-          dispatch({ type: 'SET_ACTIVE_RUN', payload: run })
-        }
       }
-    }, [state.activeRun, state.draft]),
+    }, [state.activeRun, state.draft, syncRunState]),
 
     pauseTranslation: useCallback(() => {
       if (abortControllerRef.current) {
@@ -400,11 +380,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
       pauseTranslation()
       dispatch({ type: 'SET_IS_TRANSLATING', payload: false })
-      const run = loadActiveRun()
-      if (run) {
-        dispatch({ type: 'SET_ACTIVE_RUN', payload: run })
+      if (state.activeRun) {
+        syncRunState({ ...state.activeRun, status: 'paused' })
       }
-    }, []),
+    }, [state.activeRun, syncRunState]),
 
     cancelTranslation: useCallback(() => {
       if (abortControllerRef.current) {
@@ -412,21 +391,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
       cancelTranslation()
       dispatch({ type: 'SET_IS_TRANSLATING', payload: false })
-      const run = loadActiveRun()
-      if (run) {
-        dispatch({ type: 'SET_ACTIVE_RUN', payload: run })
+      if (state.activeRun) {
+        syncRunState({ ...state.activeRun, status: 'cancelled' })
       }
-    }, []),
+    }, [state.activeRun, syncRunState]),
 
     discardActiveRun: useCallback(() => {
       discardRun()
-      dispatch({ type: 'SET_ACTIVE_RUN', payload: null })
+      syncRunState(null)
+      dispatch({ type: 'SET_TRANSLATION_OUTPUT', payload: '' })
       dispatch({
         type: 'SET_PROGRESS',
         payload: { percent: 0, currentChunk: 0, totalChunks: 0, runningChunks: [], completedChunks: 0, etaSeconds: null },
       })
       addSessionLog('Active run discarded', 'info')
-    }, []),
+    }, [syncRunState]),
 
     clearWorkspace: useCallback(() => {
       discardRun()

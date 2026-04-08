@@ -7,6 +7,7 @@ import {
   DialogDescription,
 } from './ui/dialog'
 import { Button } from './ui/button'
+import { LargeTextPreview } from './LargeTextPreview'
 
 interface PreviewModalProps {
   open: boolean
@@ -29,15 +30,19 @@ export function PreviewModal({ open, onOpenChange }: PreviewModalProps) {
         <div className="flex-1 grid md:grid-cols-2 gap-4 overflow-hidden">
           <div className="flex flex-col overflow-hidden">
             <h3 className="text-sm font-medium mb-2">Original</h3>
-            <pre className="flex-1 p-3 bg-muted rounded-md text-xs overflow-auto">
-              {state.file?.content || 'Nothing loaded yet.'}
-            </pre>
+            <LargeTextPreview
+              text={state.file?.content || ''}
+              emptyMessage="Nothing loaded yet."
+              className="flex-1 p-3 bg-muted rounded-md text-xs overflow-auto whitespace-pre-wrap"
+            />
           </div>
           <div className="flex flex-col overflow-hidden">
             <h3 className="text-sm font-medium mb-2">Translated</h3>
-            <pre className="flex-1 p-3 bg-muted rounded-md text-xs overflow-auto">
-              {state.translationOutput || 'No translation yet.'}
-            </pre>
+            <LargeTextPreview
+              text={state.translationOutput}
+              emptyMessage="No translation yet."
+              className="flex-1 p-3 bg-muted rounded-md text-xs overflow-auto whitespace-pre-wrap"
+            />
           </div>
         </div>
 

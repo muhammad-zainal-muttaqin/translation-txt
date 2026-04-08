@@ -300,6 +300,56 @@ describe('Parallel Translation', () => {
       // Call count should be high due to retries
       expect(callCount).toBeGreaterThan(4);
     });
+
+    it('keeps progress monotonic when falling back from parallel to sequential', async () => {
+      const chunks = ['Chunk 1', 'Chunk 2', 'Chunk 3', 'Chunk 4'];
+
+      vi.mocked(chunker.splitFileContent).mockReturnValue({
+        chunks,
+        config: {
+          maxCharsPerChunk: 1000,
+          overlapLines: 0,
+        },
+      });
+
+      let callCount = 0;
+      vi.mocked(providers.callProvider).mockImplementation(async () => {
+        callCount++;
+        if (callCount <= 3) {
+          throw new Error('429 rate limit exceeded');
+        }
+
+        return {
+          content: 'Translated',
+          finishReason: 'stop',
+          usage: { promptTokens: 10, completionTokens: 10, totalTokens: 20 },
+        };
+      });
+
+      const progressUpdates: number[] = [];
+      const callbacks: TranslationCallbacks = {
+        onChunkStart: vi.fn(),
+        onChunkComplete: vi.fn(),
+        onChunkError: vi.fn(),
+        onProgress: (progress) => {
+          progressUpdates.push(progress.completedChunks);
+        },
+        onComplete: vi.fn(),
+        onError: vi.fn(),
+      };
+
+      const abortController = new AbortController();
+      const config: TranslationConfig = {
+        file: mockFile,
+        draft: { ...mockDraft, maxParallelChunks: 3 },
+        abortSignal: abortController.signal,
+      };
+
+      await startTranslation(config, callbacks);
+
+      expect(progressUpdates).toEqual([...progressUpdates].sort((a, b) => a - b));
+      expect(progressUpdates[progressUpdates.length - 1]).toBe(4);
+    });
   });
 
   describe('Resume with parallel', () => {
@@ -441,6 +491,113 @@ describe('Parallel Translation', () => {
 
       // Verify pause was handled
       expect(callbacks.onComplete).not.toHaveBeenCalled();
+    });
+
+    it('persists paused status instead of failed when aborting a parallel wave', async () => {
+      const chunks = ['Chunk 1', 'Chunk 2', 'Chunk 3'];
+
+      vi.mocked(chunker.splitFileContent).mockReturnValue({
+        chunks,
+        config: {
+          maxCharsPerChunk: 1000,
+          overlapLines: 0,
+        },
+      });
+
+      vi.mocked(providers.callProvider).mockImplementation(async (_config, _prompt, options) => {
+        await new Promise((resolve, reject) => {
+          const timeout = setTimeout(resolve, 10000);
+
+          options?.signal?.addEventListener('abort', () => {
+            clearTimeout(timeout);
+            reject(new DOMException('Aborted', 'AbortError'));
+          });
+        });
+
+        return {
+          content: 'Translated',
+          finishReason: 'stop',
+          usage: { promptTokens: 10, completionTokens: 10, totalTokens: 20 },
+        };
+      });
+
+      const callbacks: TranslationCallbacks = {
+        onChunkStart: vi.fn(),
+        onChunkComplete: vi.fn(),
+        onChunkError: vi.fn(),
+        onProgress: vi.fn(),
+        onComplete: vi.fn(),
+        onError: vi.fn(),
+      };
+
+      const abortController = new AbortController();
+      const config: TranslationConfig = {
+        file: mockFile,
+        draft: mockDraft,
+        abortSignal: abortController.signal,
+      };
+
+      const translationPromise = startTranslation(config, callbacks);
+
+      setTimeout(() => {
+        abortController.abort();
+      }, 50);
+
+      await translationPromise;
+
+      const savedRuns = vi.mocked(storage.saveActiveRun).mock.calls
+        .map(([run]) => run as ActiveRun | null)
+        .filter((run): run is ActiveRun => run !== null);
+
+      expect(savedRuns.some((run) => run.status === 'paused')).toBe(true);
+      expect(savedRuns.some((run) => run.status === 'failed')).toBe(false);
+      expect(callbacks.onComplete).not.toHaveBeenCalled();
+    });
+
+    it('emits updated run snapshots before chunk-complete callbacks fire', async () => {
+      const chunks = ['Chunk 1'];
+
+      vi.mocked(chunker.splitFileContent).mockReturnValue({
+        chunks,
+        config: {
+          maxCharsPerChunk: 1000,
+          overlapLines: 0,
+        },
+      });
+
+      vi.mocked(providers.callProvider).mockResolvedValue({
+        content: 'Translated',
+        finishReason: 'stop',
+        usage: { promptTokens: 10, completionTokens: 10, totalTokens: 20 },
+      });
+
+      let lastCompletedSnapshotStatus = '';
+      const callbacks: TranslationCallbacks = {
+        onRunUpdate: (run) => {
+          if (run?.chunks[0]?.status === 'success') {
+            lastCompletedSnapshotStatus = run.chunks[0].status;
+          }
+        },
+        onChunkStart: vi.fn(),
+        onChunkComplete: vi.fn(() => {
+          expect(lastCompletedSnapshotStatus).toBe('success');
+        }),
+        onChunkError: vi.fn(),
+        onProgress: vi.fn(),
+        onComplete: vi.fn(),
+        onError: vi.fn(),
+      };
+
+      const abortController = new AbortController();
+      const config: TranslationConfig = {
+        file: mockFile,
+        draft: mockDraft,
+        abortSignal: abortController.signal,
+      };
+
+      await startTranslation(config, callbacks);
+
+      expect(callbacks.onChunkComplete).toHaveBeenCalledTimes(1);
     });
   });
 });
