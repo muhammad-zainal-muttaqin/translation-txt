@@ -146,6 +146,7 @@ export function validateProviderConfig(config: {
   endpointUrl: string;
   model: string;
   apiKey: string;
+  extraHeadersJson?: string;
 }): ValidationResult {
   const issues: ValidationIssue[] = [];
 
@@ -181,6 +182,26 @@ export function validateProviderConfig(config: {
       code: 'MISSING_API_KEY',
       message: 'API key is not set.',
     });
+  }
+
+  if (config.extraHeadersJson && config.extraHeadersJson.trim() !== '') {
+    try {
+      const parsed = JSON.parse(config.extraHeadersJson);
+      if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        issues.push({
+          level: 'error',
+          code: 'INVALID_EXTRA_HEADERS',
+          message: 'Extra headers must be a JSON object (e.g. {"X-Foo":"bar"}).',
+        });
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'parse error';
+      issues.push({
+        level: 'error',
+        code: 'INVALID_EXTRA_HEADERS',
+        message: `Extra headers must be valid JSON: ${msg}`,
+      });
+    }
   }
 
   return {

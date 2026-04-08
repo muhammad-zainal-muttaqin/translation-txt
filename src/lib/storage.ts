@@ -64,31 +64,33 @@ export function getDraftFromSettings(settings: Settings, protocol: string, prese
 
 export function saveProviderProfile(profile: SavedProviderProfile, settings: Settings): Settings {
   const existing = settings.savedProfiles.findIndex(p => p.id === profile.id);
-  if (existing >= 0) {
-    settings.savedProfiles[existing] = profile;
-  } else {
-    settings.savedProfiles.push(profile);
-  }
-  saveSettings(settings);
-  return settings;
+  const savedProfiles = existing >= 0
+    ? settings.savedProfiles.map((p, i) => (i === existing ? profile : p))
+    : [...settings.savedProfiles, profile];
+  const next: Settings = { ...settings, savedProfiles };
+  saveSettings(next);
+  return next;
 }
 
 export function deleteProviderProfile(profileId: string, settings: Settings): Settings {
-  settings.savedProfiles = settings.savedProfiles.filter(p => p.id !== profileId);
-  saveSettings(settings);
-  return settings;
+  const next: Settings = {
+    ...settings,
+    savedProfiles: settings.savedProfiles.filter(p => p.id !== profileId),
+  };
+  saveSettings(next);
+  return next;
 }
 
 export function saveRememberedDraft(draft: DraftSettings, settings: Settings): Settings {
-  settings.rememberedDraft = draft;
-  saveSettings(settings);
-  return settings;
+  const next: Settings = { ...settings, rememberedDraft: draft };
+  saveSettings(next);
+  return next;
 }
 
 export function clearRememberedDraft(settings: Settings): Settings {
-  settings.rememberedDraft = null;
-  saveSettings(settings);
-  return settings;
+  const next: Settings = { ...settings, rememberedDraft: null };
+  saveSettings(next);
+  return next;
 }
 
 export function normalizeRunOnLoad(run: ActiveRun): ActiveRun {
@@ -125,14 +127,32 @@ export function saveSessionLogs(logs: LogEntry[]): void {
   }
 }
 
+type LogSubscriber = (entry: LogEntry) => void;
+const logSubscribers = new Set<LogSubscriber>();
+
+export function subscribeToSessionLogs(fn: LogSubscriber): () => void {
+  logSubscribers.add(fn);
+  return () => {
+    logSubscribers.delete(fn);
+  };
+}
+
 export function addSessionLog(message: string, level: LogEntry['level'] = 'info'): void {
-  const logs = getSessionLogs();
-  logs.push({
+  const entry: LogEntry = {
     timestamp: Date.now(),
     level,
     message,
-  });
+  };
+  const logs = getSessionLogs();
+  logs.push(entry);
   saveSessionLogs(logs);
+  logSubscribers.forEach(fn => {
+    try {
+      fn(entry);
+    } catch (e) {
+      console.error('Log subscriber error:', e);
+    }
+  });
 }
 
 export function clearSessionLogs(): void {

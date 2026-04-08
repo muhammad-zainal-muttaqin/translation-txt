@@ -18,7 +18,7 @@ function App() {
         <Header />
         
         <main id="main-content" className={cn(
-          "min-h-screen pb-20",
+          "min-h-screen pb-16 sm:pb-20",
           "bg-background text-foreground"
         )}>
           <FirstRunStrip />
@@ -26,8 +26,8 @@ function App() {
           <Workspace onExpandPreview={() => setPreviewOpen(true)} />
         </main>
         
-        <footer className="py-6 text-center text-sm text-muted-foreground border-t">
-          <p className="mb-2">Runs in your browser by default. If a provider blocks cross-origin calls, use another gateway or a small proxy.</p>
+        <footer className="py-3 sm:py-6 px-3 sm:px-4 text-center text-xs sm:text-sm text-muted-foreground border-t">
+          <p className="mb-1 sm:mb-2 max-w-2xl mx-auto px-2">Runs in your browser by default. If a provider blocks cross-origin calls, use another gateway or a small proxy.</p>
           <a 
             href="https://github.com/muhammad-zainal-muttaqin/translation-txt" 
             target="_blank" 

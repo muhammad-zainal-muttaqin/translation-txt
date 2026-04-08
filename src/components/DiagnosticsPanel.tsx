@@ -35,8 +35,8 @@ export function DiagnosticsPanel() {
   if (chunks.length === 0) {
     return (
       <Card>
-        <CardHeader>
-          <CardTitle>Chunk Diagnostics</CardTitle>
+        <CardHeader className="pb-2 sm:pb-4">
+          <CardTitle className="text-base sm:text-lg">Chunk Diagnostics</CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-muted-foreground text-sm">No chunks processed yet.</p>
@@ -47,13 +47,13 @@ export function DiagnosticsPanel() {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Chunk Diagnostics</CardTitle>
+      <CardHeader className="pb-2 sm:pb-4">
+        <CardTitle className="text-base sm:text-lg">Chunk Diagnostics</CardTitle>
       </CardHeader>
       <CardContent className="space-y-2">
         {chunks.map((chunk, index) => (
-          <div key={index} className="border rounded-md p-3 text-sm">
-            <div className="flex items-center gap-2">
+          <div key={index} className="border rounded-md p-2 sm:p-3 text-sm">
+            <div className="flex flex-wrap items-center gap-2">
               {getStatusIcon(chunk.status)}
               <span className="font-medium">Chunk {index + 1}</span>
               <span className="text-muted-foreground ml-auto">{chunk.status}</span>

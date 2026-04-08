@@ -20,8 +20,8 @@ export function LogPanel() {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Session Events</CardTitle>
+      <CardHeader className="pb-2 sm:pb-4">
+        <CardTitle className="text-base sm:text-lg">Session Events</CardTitle>
       </CardHeader>
       <CardContent>
         {logs.length === 0 ? (
@@ -29,7 +29,7 @@ export function LogPanel() {
         ) : (
           <div 
             id="log-content"
-            className="space-y-1 max-h-96 overflow-y-auto font-mono text-xs"
+            className="space-y-1 max-h-[300px] sm:max-h-96 overflow-y-auto font-mono text-xs break-all"
           >
             {logs.map((log, index) => (
               <div

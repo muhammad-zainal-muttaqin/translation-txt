@@ -47,13 +47,13 @@ export function FilePanel() {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <FileText className="h-5 w-5" />
+      <CardHeader className="pb-2 sm:pb-4">
+        <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+          <FileText className="h-4 w-4 sm:h-5 sm:w-5" />
           File Intake
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-3 sm:space-y-4">
         <div>
           <Input
             type="file"
@@ -63,10 +63,10 @@ export function FilePanel() {
             className="hidden"
           />
           <label htmlFor="file-input" className="block">
-            <div className="border-2 border-dashed border-border rounded-lg p-8 text-center cursor-pointer hover:border-primary hover:bg-muted/50 transition-colors">
-              <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
-              <p className="font-medium">Add your file</p>
-              <p className="text-sm text-muted-foreground mt-1">
+            <div className="border-2 border-dashed border-border rounded-lg p-4 sm:p-8 text-center cursor-pointer hover:border-primary hover:bg-muted/50 transition-colors">
+              <Upload className="h-6 w-6 sm:h-8 sm:w-8 mx-auto mb-2 text-muted-foreground" />
+              <p className="font-medium text-sm sm:text-base">Add your file</p>
+              <p className="text-xs sm:text-sm text-muted-foreground mt-1">
                 Drop here or browse: TXT, CSV, Markdown, JSON, logs, subtitles, XML, YAML
               </p>
             </div>
@@ -74,7 +74,7 @@ export function FilePanel() {
         </div>
 
         {file && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 text-sm">
             <div>
               <Label className="text-muted-foreground">File</Label>
               <p className="font-medium truncate">{file.name}</p>

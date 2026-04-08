@@ -2,7 +2,7 @@ import { useApp } from '../contexts/AppContext'
 import { Button } from './ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
 import { Progress } from './ui/progress'
-import { Play, Pause, CheckCircle, XCircle, AlertCircle } from 'lucide-react'
+import { Play, Pause, CheckCircle, XCircle, AlertCircle, Clock, Loader2 } from 'lucide-react'
 
 export function RunPanel() {
   const { state } = useApp()
@@ -21,6 +21,13 @@ export function RunPanel() {
     return formatTime(seconds)
   }
 
+  // Calculate wave info
+  const maxParallel = state.draft?.maxParallelChunks || 3
+  const currentWave = progress.runningChunks.length > 0 
+    ? Math.floor(Math.min(...progress.runningChunks) / maxParallel) + 1
+    : 0
+  const totalWaves = Math.ceil((progress.totalChunks || 1) / maxParallel)
+
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'success':
@@ -38,69 +45,87 @@ export function RunPanel() {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Play className="h-5 w-5" />
+      <CardHeader className="pb-2 sm:pb-4">
+        <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+          <Play className="h-4 w-4 sm:h-5 sm:w-5" />
           Run Monitor
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-2">
-          <div className="flex justify-between text-sm">
+      <CardContent className="space-y-3 sm:space-y-4">
+        <div className="space-y-1.5 sm:space-y-2">
+          <div className="flex justify-between text-xs sm:text-sm">
             <span className="font-medium">Progress</span>
             <span>{progress.percent}%</span>
           </div>
-          <Progress value={progress.percent} />
+          <Progress value={progress.percent} className="h-2 sm:h-4" />
           {progress.totalChunks > 0 && (
-            <p className="text-xs text-muted-foreground text-center">
-              Chunk {progress.currentChunk} of {progress.totalChunks}
-            </p>
+            <div className="text-[10px] sm:text-xs text-muted-foreground text-center space-y-0.5">
+              <p>Chunk {progress.completedChunks} of {progress.totalChunks} completed</p>
+              {state.isTranslating && progress.runningChunks.length > 0 && (
+                <p className="flex items-center justify-center gap-1">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Wave {currentWave}/{totalWaves}: Processing {progress.runningChunks.length} chunks (
+                  {progress.runningChunks.map(i => i + 1).join(', ')})
+                </p>
+              )}
+            </div>
           )}
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
-          <div>
-            <span className="text-muted-foreground">Format</span>
-            <p className="font-medium">{state.file?.format || 'None'}</p>
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-3 text-xs sm:text-sm">
+          <div className="bg-muted/50 rounded p-2 sm:p-3">
+            <span className="text-muted-foreground block text-[10px] sm:text-xs uppercase tracking-wider mb-1">Format</span>
+            <p className="font-medium truncate">{state.file?.format || 'None'}</p>
           </div>
-          <div>
-            <span className="text-muted-foreground">Provider</span>
-            <p className="font-medium">{state.draft?.providerPreset || 'Not configured'}</p>
+          <div className="bg-muted/50 rounded p-2 sm:p-3">
+            <span className="text-muted-foreground block text-[10px] sm:text-xs uppercase tracking-wider mb-1">Provider</span>
+            <p className="font-medium truncate">{state.draft?.providerPreset || 'Not set'}</p>
           </div>
-          <div>
-            <span className="text-muted-foreground">Chunks</span>
+          <div className="bg-muted/50 rounded p-2 sm:p-3">
+            <span className="text-muted-foreground block text-[10px] sm:text-xs uppercase tracking-wider mb-1">Chunks</span>
             <p className="font-medium">{progress.totalChunks || activeRun?.totalChunks || 0}</p>
           </div>
-          <div>
-            <span className="text-muted-foreground">Status</span>
-            <p className="font-medium">{activeRun?.status || 'Idle'}</p>
+          <div className="bg-muted/50 rounded p-2 sm:p-3">
+            <span className="text-muted-foreground block text-[10px] sm:text-xs uppercase tracking-wider mb-1">Status</span>
+            <p className="font-medium truncate">{activeRun?.status || 'Idle'}</p>
           </div>
-          <div>
-            <span className="text-muted-foreground">Prepass</span>
-            <p className="font-medium">{state.draft?.novelModeEnabled ? 'Novel' : 'Standard'}</p>
+          <div className="bg-muted/50 rounded p-2 sm:p-3">
+            <span className="text-muted-foreground block text-[10px] sm:text-xs uppercase tracking-wider mb-1">Prepass</span>
+            <p className="font-medium">{state.draft?.novelModeEnabled ? 'Novel' : 'Std'}</p>
           </div>
-          <div>
-            <span className="text-muted-foreground">Elapsed</span>
+          <div className="bg-muted/50 rounded p-2 sm:p-3">
+            <span className="text-muted-foreground block text-[10px] sm:text-xs uppercase tracking-wider mb-1">Elapsed</span>
             <p className="font-medium">{activeRun?.progress?.elapsedSeconds ? formatTime(activeRun.progress.elapsedSeconds) : '0s'}</p>
           </div>
-          <div>
-            <span className="text-muted-foreground">Avg chunk</span>
-            <p className="font-medium">{activeRun?.progress?.averageChunkTime ? formatTime(Math.round(activeRun.progress.averageChunkTime)) : '-'}</p>
+          <div className="bg-muted/50 rounded p-2 sm:p-3">
+            <span className="text-muted-foreground block text-[10px] sm:text-xs uppercase tracking-wider mb-1">Parallel</span>
+            <p className="font-medium">{maxParallel} chunks</p>
           </div>
-          <div>
-            <span className="text-muted-foreground">ETA</span>
-            <p className="font-medium">{formatEta(activeRun?.progress?.etaSeconds || null)}</p>
+          <div className="bg-muted/50 rounded p-2 sm:p-3">
+            <span className="text-muted-foreground block text-[10px] sm:text-xs uppercase tracking-wider mb-1">ETA</span>
+            <p className="font-medium flex items-center gap-1">
+              <Clock className="h-3 w-3" />
+              {formatEta(progress.etaSeconds || activeRun?.progress?.etaSeconds || null)}
+            </p>
           </div>
         </div>
 
         {activeRun?.chunks && activeRun.chunks.length > 0 && (
           <div className="border-t pt-4">
-            <h4 className="font-medium mb-2">Chunks</h4>
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="font-medium">Chunks</h4>
+              <span className="text-xs text-muted-foreground">
+                {activeRun.chunks.filter(c => c.status === 'success' || c.status === 'truncated').length} / {activeRun.chunks.length} done
+              </span>
+            </div>
             <div className="space-y-1 max-h-32 overflow-y-auto">
               {activeRun.chunks.map((chunk, i) => (
                 <div key={i} className="flex items-center gap-2 text-xs">
                   {getStatusIcon(chunk.status)}
-                  <span>Chunk {i + 1}</span>
+                  <span className={chunk.status === 'running' ? 'font-medium text-primary' : ''}>
+                    Chunk {i + 1}
+                    {chunk.status === 'running' && <Loader2 className="inline h-3 w-3 ml-1 animate-spin" />}
+                  </span>
                   <span className="text-muted-foreground ml-auto">{chunk.status}</span>
                 </div>
               ))}

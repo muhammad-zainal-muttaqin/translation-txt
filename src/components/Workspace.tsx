@@ -34,7 +34,7 @@ export function Workspace({ onExpandPreview }: WorkspaceProps) {
   }
 
   return (
-    <div className="container mx-auto px-4 py-4">
+    <div className="container mx-auto px-3 sm:px-4 py-3 sm:py-4">
       <div className="hidden md:flex border-b mb-4">
         <Tabs value={activePanel} onValueChange={handlePanelChange}>
           <TabsList className="h-auto p-0 bg-transparent gap-1">
@@ -54,11 +54,11 @@ export function Workspace({ onExpandPreview }: WorkspaceProps) {
         </Tabs>
       </div>
 
-      <div className="md:hidden mb-4">
+      <div className="md:hidden mb-3 sm:mb-4">
         <select
           value={activePanel}
           onChange={(e) => handlePanelChange(e.target.value)}
-          className="w-full p-2 border rounded-md bg-background"
+          className="w-full p-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
         >
           {PANELS.map((panel) => (
             <option key={panel.id} value={panel.id}>

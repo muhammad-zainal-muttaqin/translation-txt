@@ -60,14 +60,14 @@ export function LanguagesPanel() {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <LanguagesIcon className="h-5 w-5" />
+      <CardHeader className="pb-2 sm:pb-4">
+        <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+          <LanguagesIcon className="h-4 w-4 sm:h-5 sm:w-5" />
           Languages
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid md:grid-cols-2 gap-4">
+      <CardContent className="space-y-3 sm:space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <Label htmlFor="source-language">Source language</Label>
             <select

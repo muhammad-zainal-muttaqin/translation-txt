@@ -1,4 +1,4 @@
-import { createContext, useContext, useReducer, useRef, ReactNode, useCallback } from 'react'
+import { createContext, useContext, useReducer, useRef, ReactNode, useCallback, useEffect } from 'react'
 import type {
   Settings,
   DraftSettings,
@@ -11,8 +11,8 @@ import type {
   ChunkRecord,
 } from '../types'
 import { DEFAULT_INSTRUCTION } from '../types'
-import { startTranslation, pauseTranslation, cancelTranslation, discardActiveRun as discardRun } from '../lib/translate'
-import { loadSettings, saveSettings, loadActiveRun, saveActiveRun, getSessionLogs, addSessionLog } from '../lib/storage'
+import { startTranslation, pauseTranslation, cancelTranslation, discardActiveRun as discardRun, resumeTranslation } from '../lib/translate'
+import { loadSettings, loadActiveRun, saveActiveRun, getSessionLogs, addSessionLog, normalizeRunOnLoad, subscribeToSessionLogs } from '../lib/storage'
 
 interface AppState {
   settings: Settings
@@ -32,6 +32,9 @@ interface AppState {
     percent: number
     currentChunk: number
     totalChunks: number
+    runningChunks: number[]
+    completedChunks: number
+    etaSeconds: number | null
   }
 }
 
@@ -49,14 +52,25 @@ type AppAction =
   | { type: 'SET_ACTIVE_RUN'; payload: ActiveRun | null }
   | { type: 'SET_ACTIVE_PANEL'; payload: WorkspacePanelId }
   | { type: 'ADD_LOG'; payload: LogEntry }
-  | { type: 'SET_PROGRESS'; payload: { percent: number; currentChunk: number; totalChunks: number } }
+  | { type: 'SET_PROGRESS'; payload: { percent: number; currentChunk: number; totalChunks: number; runningChunks: number[]; completedChunks: number; etaSeconds: number | null } }
   | { type: 'UPDATE_CHUNK'; payload: { index: number; chunk: ChunkRecord } }
   | { type: 'SET_LOGS'; payload: LogEntry[] }
   | { type: 'RESET' }
 
 function loadInitialState(): AppState {
   const settings = loadSettings()
-  const activeRun = loadActiveRun()
+  // Migration: bump previously-saved drafts that still carry an old low cap
+  // (or are missing the field) to 65536 — needed because there's no UI yet to
+  // edit maxOutputTokens, and modern models (Kimi K2.5, etc.) support 200k+
+  // output tokens but emit lots of reasoning/thinking that count toward the cap.
+  if (settings.rememberedDraft && (!settings.rememberedDraft.maxOutputTokens || settings.rememberedDraft.maxOutputTokens < 65536)) {
+    settings.rememberedDraft = { ...settings.rememberedDraft, maxOutputTokens: 65536 }
+  }
+  const rawRun = loadActiveRun()
+  const activeRun = rawRun ? normalizeRunOnLoad(rawRun) : null
+  if (activeRun && rawRun && activeRun.status !== rawRun.status) {
+    saveActiveRun(activeRun)
+  }
   const logs = getSessionLogs()
 
   return {
@@ -77,6 +91,9 @@ function loadInitialState(): AppState {
       percent: activeRun?.progress.percent || 0,
       currentChunk: activeRun?.processedChunks || 0,
       totalChunks: activeRun?.totalChunks || 0,
+      runningChunks: [],
+      completedChunks: activeRun?.processedChunks || 0,
+      etaSeconds: activeRun?.progress.etaSeconds || null,
     },
   }
 }
@@ -107,8 +124,10 @@ function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, activeRun: action.payload }
     case 'SET_ACTIVE_PANEL':
       return { ...state, activePanel: action.payload }
-    case 'ADD_LOG':
-      return { ...state, logs: [...state.logs, action.payload] }
+    case 'ADD_LOG': {
+      const next = [...state.logs, action.payload]
+      return { ...state, logs: next.length > 500 ? next.slice(-500) : next }
+    }
     case 'SET_LOGS':
       return { ...state, logs: action.payload }
     case 'SET_PROGRESS':
@@ -143,6 +162,9 @@ const initialState: AppState = {
     percent: 0,
     currentChunk: 0,
     totalChunks: 0,
+    runningChunks: [],
+    completedChunks: 0,
+    etaSeconds: null,
   },
 }
 
@@ -151,6 +173,7 @@ interface AppContextType {
   dispatch: React.Dispatch<AppAction>
   actions: {
     startTranslation: () => Promise<void>
+    resumeTranslation: () => Promise<void>
     pauseTranslation: () => void
     cancelTranslation: () => void
     discardActiveRun: () => void
@@ -163,6 +186,12 @@ const AppContext = createContext<AppContextType | undefined>(undefined)
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(appReducer, initialState, loadInitialState)
   const abortControllerRef = useRef<AbortController | null>(null)
+
+  useEffect(() => {
+    return subscribeToSessionLogs((entry) => {
+      dispatch({ type: 'ADD_LOG', payload: entry })
+    })
+  }, [])
 
   const actions = {
     startTranslation: useCallback(async () => {
@@ -183,10 +212,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
           },
           {
             onChunkStart: (index) => {
-              addSessionLog('Chunk ' + (index + 1) + ' started', 'info')
+              const run = loadActiveRun()
+              if (run) {
+                dispatch({ type: 'SET_ACTIVE_RUN', payload: run })
+              }
             },
             onChunkComplete: (index, _result) => {
-              addSessionLog('Chunk ' + (index + 1) + ' completed', 'info')
               const run = loadActiveRun()
               if (run) {
                 dispatch({ type: 'SET_ACTIVE_RUN', payload: run })
@@ -202,8 +233,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
                   percent: progress.percent,
                   currentChunk: progress.currentChunk,
                   totalChunks: progress.totalChunks,
+                  runningChunks: progress.runningChunks,
+                  completedChunks: progress.completedChunks,
+                  etaSeconds: progress.etaSeconds,
                 },
               })
+            },
+            onWaveStart: (waveIndex, chunkIndices) => {
+              addSessionLog(`Wave ${waveIndex}: Processing chunks ${chunkIndices.map(i => i + 1).join(', ')}`, 'info')
+              dispatch({
+                type: 'SET_PROGRESS',
+                payload: {
+                  ...state.progress,
+                  runningChunks: chunkIndices,
+                },
+              })
+            },
+            onWaveComplete: (waveIndex) => {
+              const run = loadActiveRun()
+              if (run) {
+                dispatch({ type: 'SET_ACTIVE_RUN', payload: run })
+              }
             },
             onComplete: (output) => {
               dispatch({ type: 'SET_TRANSLATION_OUTPUT', payload: output })
@@ -226,6 +276,90 @@ export function AppProvider({ children }: { children: ReactNode }) {
         abortControllerRef.current = null
       }
     }, [state.file, state.draft]),
+
+    resumeTranslation: useCallback(async () => {
+      if (!state.activeRun || !state.draft) {
+        addSessionLog('No paused run or draft to resume', 'error')
+        return
+      }
+
+      abortControllerRef.current = new AbortController()
+      dispatch({ type: 'SET_IS_TRANSLATING', payload: true })
+
+      try {
+        await resumeTranslation(
+          {
+            run: state.activeRun,
+            draft: state.draft,
+            abortSignal: abortControllerRef.current.signal,
+          },
+          {
+            onChunkStart: (_index) => {
+              const run = loadActiveRun()
+              if (run) {
+                dispatch({ type: 'SET_ACTIVE_RUN', payload: run })
+              }
+            },
+            onChunkComplete: (_index, _result) => {
+              const run = loadActiveRun()
+              if (run) {
+                dispatch({ type: 'SET_ACTIVE_RUN', payload: run })
+              }
+            },
+            onChunkError: (_index, _error) => {},
+            onProgress: (progress) => {
+              dispatch({
+                type: 'SET_PROGRESS',
+                payload: {
+                  percent: progress.percent,
+                  currentChunk: progress.currentChunk,
+                  totalChunks: progress.totalChunks,
+                  runningChunks: progress.runningChunks,
+                  completedChunks: progress.completedChunks,
+                  etaSeconds: progress.etaSeconds,
+                },
+              })
+            },
+            onWaveStart: (waveIndex, chunkIndices) => {
+              addSessionLog(`Wave ${waveIndex}: Resuming chunks ${chunkIndices.map(i => i + 1).join(', ')}`, 'info')
+              dispatch({
+                type: 'SET_PROGRESS',
+                payload: {
+                  ...state.progress,
+                  runningChunks: chunkIndices,
+                },
+              })
+            },
+            onWaveComplete: (waveIndex) => {
+              const run = loadActiveRun()
+              if (run) {
+                dispatch({ type: 'SET_ACTIVE_RUN', payload: run })
+              }
+            },
+            onComplete: (output) => {
+              dispatch({ type: 'SET_TRANSLATION_OUTPUT', payload: output })
+              const run = loadActiveRun()
+              if (run) {
+                dispatch({ type: 'SET_ACTIVE_RUN', payload: run })
+              }
+            },
+            onError: (error) => {
+              addSessionLog('Translation error: ' + error, 'error')
+            },
+          }
+        )
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : 'Unknown error'
+        addSessionLog('Resume failed: ' + errorMsg, 'error')
+      } finally {
+        dispatch({ type: 'SET_IS_TRANSLATING', payload: false })
+        abortControllerRef.current = null
+        const run = loadActiveRun()
+        if (run) {
+          dispatch({ type: 'SET_ACTIVE_RUN', payload: run })
+        }
+      }
+    }, [state.activeRun, state.draft]),
 
     pauseTranslation: useCallback(() => {
       if (abortControllerRef.current) {
@@ -256,7 +390,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       dispatch({ type: 'SET_ACTIVE_RUN', payload: null })
       dispatch({
         type: 'SET_PROGRESS',
-        payload: { percent: 0, currentChunk: 0, totalChunks: 0 },
+        payload: { percent: 0, currentChunk: 0, totalChunks: 0, runningChunks: [], completedChunks: 0, etaSeconds: null },
       })
       addSessionLog('Active run discarded', 'info')
     }, []),
@@ -306,5 +440,6 @@ export function getDefaultDraft(): DraftSettings {
     maxCharsPerChunk: 9000,
     overlapLines: 2,
     maxParallelChunks: 3,
+    maxOutputTokens: 65536,
   }
 }

@@ -67,59 +67,64 @@ export function OutputPanel({ onExpandPreview }: OutputPanelProps) {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <FileText className="h-5 w-5" />
+      <CardHeader className="pb-2 sm:pb-4">
+        <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+          <FileText className="h-4 w-4 sm:h-5 sm:w-5" />
           Output Preview
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid md:grid-cols-2 gap-4">
+      <CardContent className="space-y-3 sm:space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <h4 className="text-sm font-medium mb-2">Original</h4>
-            <pre className="p-3 bg-muted rounded-md text-xs overflow-auto max-h-64">
+            <pre className="p-3 bg-muted rounded-md text-xs overflow-auto max-h-64 break-all whitespace-pre-wrap">
               {state.file?.content || 'Nothing loaded yet.'}
             </pre>
           </div>
           <div>
             <h4 className="text-sm font-medium mb-2">Translated</h4>
-            <pre className="p-3 bg-muted rounded-md text-xs overflow-auto max-h-64">
+            <pre className="p-3 bg-muted rounded-md text-xs overflow-auto max-h-64 break-all whitespace-pre-wrap">
               {state.translationOutput || 'No translation yet.'}
             </pre>
           </div>
         </div>
 
         <div className="flex flex-wrap gap-2">
-          <Button variant="ghost" onClick={onExpandPreview}>
+          <Button variant="ghost" size="sm" onClick={onExpandPreview}>
             <Maximize2 className="h-4 w-4 mr-1" />
-            Expand preview
+            <span className="hidden sm:inline">Expand preview</span>
+            <span className="inline sm:hidden">Expand</span>
           </Button>
         </div>
 
         <div className="flex flex-wrap gap-2 border-t pt-4">
           <Button
             variant="secondary"
+            size="sm"
             disabled={!hasOutput}
             onClick={handleDownloadSingle}
           >
             <Download className="h-4 w-4 mr-1" />
-            Download translated file
+            <span className="hidden sm:inline">Download translated file</span>
+            <span className="inline sm:hidden">Download</span>
           </Button>
           <Button 
-            variant="ghost" 
+            variant="ghost"
+            size="sm"
             disabled={!hasOutput || translatedChunks.length === 0}
             onClick={handleDownloadZip}
           >
             <Download className="h-4 w-4 mr-1" />
-            Download ZIP
+            ZIP
           </Button>
           <Button 
-            variant="ghost" 
+            variant="ghost"
+            size="sm"
             disabled={!hasOutput} 
             onClick={handleCopy}
           >
             <Copy className="h-4 w-4 mr-1" />
-            {copySuccess ? 'Copied!' : 'Copy translation'}
+            {copySuccess ? 'Copied!' : 'Copy'}
           </Button>
         </div>
       </CardContent>

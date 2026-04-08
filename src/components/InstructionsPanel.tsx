@@ -27,13 +27,13 @@ export function InstructionsPanel() {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Settings className="h-5 w-5" />
+      <CardHeader className="pb-2 sm:pb-4">
+        <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+          <Settings className="h-4 w-4 sm:h-5 sm:w-5" />
           Instructions and Chunking
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-3 sm:space-y-4">
         <label className="flex items-center gap-2 cursor-pointer">
           <Checkbox
             id="use-default-instruction"
@@ -79,7 +79,7 @@ export function InstructionsPanel() {
               and inject bounded cast and glossary memory during translation.
             </p>
 
-            <div className="grid md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
               <div>
                 <Label htmlFor="max-chars-per-chunk">Max characters per chunk</Label>
                 <Input

@@ -20,6 +20,7 @@ export interface DraftSettings {
   maxCharsPerChunk: number;
   overlapLines: number;
   maxParallelChunks: number;
+  maxOutputTokens: number;
 }
 
 export interface SavedProviderProfile {
@@ -170,6 +171,7 @@ export interface ProviderConfig {
   apiKey: string;
   extraHeaders: Record<string, string>;
   anthropicVersion: string;
+  maxOutputTokens?: number;
 }
 
 export type WorkspacePanelId = 

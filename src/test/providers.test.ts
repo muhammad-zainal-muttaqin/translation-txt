@@ -16,11 +16,21 @@ describe('providers', () => {
 
   describe('callOpenAICompatible', () => {
     it('should call OpenAI-compatible endpoint and return content', async () => {
+      const sse = [
+        'data: {"choices":[{"delta":{"content":"Translated "},"finish_reason":null}]}\n\n',
+        'data: {"choices":[{"delta":{"content":"text"},"finish_reason":"stop"}]}\n\n',
+        'data: [DONE]\n\n',
+      ]
+      const encoder = new TextEncoder()
+      const stream = new ReadableStream({
+        start(controller) {
+          for (const part of sse) controller.enqueue(encoder.encode(part))
+          controller.close()
+        },
+      })
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({
-          choices: [{ message: { content: 'Translated text' } }],
-        }),
+        body: stream,
       })
 
       const config: ProviderConfig = {

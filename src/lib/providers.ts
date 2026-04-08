@@ -10,49 +10,146 @@ export interface ProviderResponse {
   };
 }
 
+export interface CallOptions {
+  signal?: AbortSignal;
+  timeoutMs?: number;
+}
+
+const DEFAULT_TIMEOUT_MS = 900_000;
+
+/**
+ * Wraps fetch with a request timeout and forwards an external AbortSignal.
+ * Either source (timeout or external abort) cancels the request cleanly.
+ */
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  options: CallOptions
+): Promise<Response> {
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const controller = new AbortController();
+
+  const onExternalAbort = () => controller.abort(options.signal?.reason);
+  if (options.signal) {
+    if (options.signal.aborted) {
+      throw new DOMException('Aborted', 'AbortError');
+    }
+    options.signal.addEventListener('abort', onExternalAbort, { once: true });
+  }
+
+  const timeoutId = setTimeout(() => {
+    controller.abort(new DOMException(`Request timed out after ${timeoutMs}ms`, 'TimeoutError'));
+  }, timeoutMs);
+
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      // Distinguish timeout from user-initiated cancellation
+      if (controller.signal.reason instanceof DOMException && controller.signal.reason.name === 'TimeoutError') {
+        throw new Error(`Request timed out after ${timeoutMs / 1000}s. The provider did not respond within the deadline — try a smaller "Max chars per chunk", a lower "Max output tokens", or a faster model.`);
+      }
+      throw err;
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+    if (options.signal) {
+      options.signal.removeEventListener('abort', onExternalAbort);
+    }
+  }
+}
+
 export async function callOpenAICompatible(
   config: ProviderConfig,
-  prompt: string
+  prompt: string,
+  options: CallOptions = {}
 ): Promise<ProviderResponse> {
-  const { endpointUrl, model, apiKey, extraHeaders } = config;
+  const { endpointUrl, model, apiKey, extraHeaders, maxOutputTokens } = config;
 
-  const response = await fetch(endpointUrl, {
+  const response = await fetchWithTimeout(endpointUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${apiKey}`,
+      'Accept': 'text/event-stream',
       ...extraHeaders,
     },
     body: JSON.stringify({
       model,
+      max_tokens: maxOutputTokens ?? 8192,
+      stream: true,
       messages: [
         { role: 'system', content: 'You are a helpful translation assistant.' },
         { role: 'user', content: prompt },
       ],
     }),
-  });
+  }, options);
 
   if (!response.ok) {
     const errorText = await response.text();
     throw new Error(`OpenAI-compatible API error ${response.status}: ${errorText}`);
   }
 
-  const data = await response.json();
-  const content = data.choices?.[0]?.message?.content ?? '';
-  const finishReason = data.choices?.[0]?.finish_reason;
-  const usage = data.usage;
+  if (!response.body) {
+    throw new Error('OpenAI-compatible API returned an empty response body.');
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let content = '';
+  let finishReason: string | undefined;
+  let usage: ProviderResponse['usage'];
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      let newlineIndex: number;
+      while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
+        const rawLine = buffer.slice(0, newlineIndex);
+        buffer = buffer.slice(newlineIndex + 1);
+        const line = rawLine.replace(/\r$/, '').trim();
+        if (!line || !line.startsWith('data:')) continue;
+        const payload = line.slice(5).trim();
+        if (payload === '[DONE]') continue;
+
+        try {
+          const event = JSON.parse(payload);
+          const delta = event.choices?.[0]?.delta?.content;
+          if (typeof delta === 'string') content += delta;
+          const fr = event.choices?.[0]?.finish_reason;
+          if (fr) finishReason = fr;
+          if (event.usage) {
+            usage = {
+              promptTokens: event.usage.prompt_tokens,
+              completionTokens: event.usage.completion_tokens,
+              totalTokens: event.usage.total_tokens,
+            };
+          }
+        } catch {
+          // Skip malformed SSE lines (some providers emit keep-alives)
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
 
   return { content, finishReason, usage };
 }
 
 export async function callAnthropic(
   config: ProviderConfig,
-  prompt: string
+  prompt: string,
+  options: CallOptions = {}
 ): Promise<ProviderResponse> {
-  const { endpointUrl, apiKey, extraHeaders, anthropicVersion } = config;
-  const model = config.model || 'claude-sonnet-4-20250514';
+  const { endpointUrl, model, apiKey, extraHeaders, anthropicVersion, maxOutputTokens } = config;
 
-  const response = await fetch(endpointUrl, {
+  const response = await fetchWithTimeout(endpointUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -62,12 +159,12 @@ export async function callAnthropic(
     },
     body: JSON.stringify({
       model,
-      max_tokens: 4096,
+      max_tokens: maxOutputTokens ?? 8192,
       messages: [
         { role: 'user', content: prompt },
       ],
     }),
-  });
+  }, options);
 
   if (!response.ok) {
     const errorText = await response.text();
@@ -76,7 +173,8 @@ export async function callAnthropic(
 
   const data = await response.json();
   const content = data.content?.[0]?.text ?? '';
-  const finishReason = data.stop_reason;
+  // Normalize Anthropic's stop_reason to match OpenAI's 'length' for truncation detection
+  const finishReason = data.stop_reason === 'max_tokens' ? 'length' : data.stop_reason;
   const usage = data.usage;
 
   return { content, finishReason, usage };
@@ -84,13 +182,15 @@ export async function callAnthropic(
 
 export async function callGemini(
   config: ProviderConfig,
-  prompt: string
+  prompt: string,
+  options: CallOptions = {}
 ): Promise<ProviderResponse> {
-  const { endpointUrl, model, apiKey, extraHeaders } = config;
+  const { endpointUrl, model, apiKey, extraHeaders, maxOutputTokens } = config;
 
-  const url = `${endpointUrl}/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const base = endpointUrl.replace(/\/+$/, '');
+  const url = `${base}/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
-  const response = await fetch(url, {
+  const response = await fetchWithTimeout(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -102,8 +202,11 @@ export async function callGemini(
           parts: [{ text: prompt }],
         },
       ],
+      generationConfig: {
+        maxOutputTokens: maxOutputTokens ?? 8192,
+      },
     }),
-  });
+  }, options);
 
   if (!response.ok) {
     const errorText = await response.text();
@@ -111,30 +214,33 @@ export async function callGemini(
   }
 
   const data = await response.json();
-  
+
   if (data.promptFeedback?.blockReason) {
     throw new Error(`Content blocked: ${data.promptFeedback.blockReason}`);
   }
 
   const content = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-  const finishReason = data.candidates?.[0]?.finishReason;
+  const rawFinishReason = data.candidates?.[0]?.finishReason;
+  // Normalize Gemini's MAX_TOKENS to match OpenAI's 'length' for truncation detection
+  const finishReason = rawFinishReason === 'MAX_TOKENS' ? 'length' : rawFinishReason;
 
   return { content, finishReason };
 }
 
 export async function callProvider(
   config: ProviderConfig,
-  prompt: string
+  prompt: string,
+  options: CallOptions = {}
 ): Promise<ProviderResponse> {
   const { protocol } = config;
 
   switch (protocol) {
     case 'openai-compatible':
-      return callOpenAICompatible(config, prompt);
+      return callOpenAICompatible(config, prompt, options);
     case 'anthropic-compatible':
-      return callAnthropic(config, prompt);
+      return callAnthropic(config, prompt, options);
     case 'gemini':
-      return callGemini(config, prompt);
+      return callGemini(config, prompt, options);
     default:
       throw new Error(`Unknown protocol: ${protocol}`);
   }
