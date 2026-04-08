@@ -14,9 +14,38 @@ import { DEFAULT_INSTRUCTION } from '../types'
 import { startTranslation, pauseTranslation, cancelTranslation, discardActiveRun as discardRun, resumeTranslation } from '../lib/translate'
 import { loadSettings, loadActiveRun, saveActiveRun, getSessionLogs, addSessionLog, normalizeRunOnLoad, subscribeToSessionLogs } from '../lib/storage'
 
+// Default draft factory - defined early for use in initialState
+function createDefaultDraft(): DraftSettings {
+  return {
+    providerProtocol: 'openai-compatible',
+    providerPreset: 'openrouter',
+    endpointUrl: 'https://openrouter.ai/api/v1/chat/completions',
+    model: '',
+    apiKey: '',
+    rememberOnDevice: false,
+    extraHeadersJson: '',
+    anthropicVersion: '2023-06-01',
+    profileName: '',
+    sourceLanguage: 'auto',
+    sourceLanguageCustom: '',
+    targetLanguage: 'en',
+    targetLanguageCustom: '',
+    useDefaultInstruction: true,
+    customInstruction: DEFAULT_INSTRUCTION,
+    novelModeEnabled: true,
+    refusalRecoveryEnabled: true,
+    autoSplit: true,
+    maxCharsPerChunk: 9000,
+    overlapLines: 2,
+    maxParallelChunks: 3,
+    parallelMultiplier: 1,
+    maxOutputTokens: 65536,
+  }
+}
+
 interface AppState {
   settings: Settings
-  draft: DraftSettings | null
+  draft: DraftSettings
   file: FileState | null
   chunkConfig: ChunkConfig | null
   originalChunks: string[]
@@ -73,9 +102,12 @@ function loadInitialState(): AppState {
   }
   const logs = getSessionLogs()
 
+  // Ensure we always have a valid draft, never null
+  const draft = settings.rememberedDraft || createDefaultDraft()
+  
   return {
     settings,
-    draft: settings.rememberedDraft,
+    draft,
     file: activeRun?.file || null,
     chunkConfig: activeRun?.config || null,
     originalChunks: activeRun?.chunks.map(c => c.original) || [],
@@ -103,7 +135,8 @@ function appReducer(state: AppState, action: AppAction): AppState {
     case 'SET_SETTINGS':
       return { ...state, settings: action.payload }
     case 'SET_DRAFT':
-      return { ...state, draft: action.payload }
+      // Never allow null draft - use default if null
+      return { ...state, draft: action.payload || createDefaultDraft() }
     case 'SET_FILE':
       return { ...state, file: action.payload }
     case 'SET_CHUNK_CONFIG':
@@ -146,7 +179,7 @@ const initialState: AppState = {
     rememberedDraft: null,
     savedProfiles: [],
   },
-  draft: null,
+  draft: createDefaultDraft(), // Never null
   file: null,
   chunkConfig: null,
   originalChunks: [],
@@ -417,30 +450,7 @@ export function useApp() {
   return context
 }
 
+// Re-export for backward compatibility
 export function getDefaultDraft(): DraftSettings {
-  return {
-    providerProtocol: 'openai-compatible',
-    providerPreset: 'openrouter',
-    endpointUrl: 'https://openrouter.ai/api/v1/chat/completions',
-    model: '',
-    apiKey: '',
-    rememberOnDevice: false,
-    extraHeadersJson: '',
-    anthropicVersion: '2023-06-01',
-    profileName: '',
-    sourceLanguage: 'auto',
-    sourceLanguageCustom: '',
-    targetLanguage: 'en',
-    targetLanguageCustom: '',
-    useDefaultInstruction: true,
-    customInstruction: DEFAULT_INSTRUCTION,
-    novelModeEnabled: true,
-    refusalRecoveryEnabled: true,
-    autoSplit: true,
-    maxCharsPerChunk: 9000,
-    overlapLines: 2,
-    maxParallelChunks: 3,
-    parallelMultiplier: 1, // Default 1x (3 parallel chunks)
-    maxOutputTokens: 65536,
-  }
+  return createDefaultDraft()
 }
