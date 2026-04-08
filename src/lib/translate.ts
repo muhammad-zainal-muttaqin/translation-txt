@@ -549,6 +549,11 @@ export async function startTranslation(
     return;
   }
 
+  // Calculate actual parallel chunks with multiplier (capped at 100 for safety)
+  const baseParallel = draft.maxParallelChunks || 3;
+  const multiplier = draft.parallelMultiplier || 1;
+  const actualMaxParallel = Math.min(100, baseParallel * multiplier);
+
   const chunkConfig: ChunkConfig = {
     sourceLanguage: draft.sourceLanguage === 'custom' ? draft.sourceLanguageCustom : draft.sourceLanguage,
     targetLanguage: draft.targetLanguage === 'custom' ? draft.targetLanguageCustom : draft.targetLanguage,
@@ -557,7 +562,8 @@ export async function startTranslation(
     refusalRecoveryEnabled: draft.refusalRecoveryEnabled,
     maxCharsPerChunk: draft.maxCharsPerChunk,
     overlapLines: draft.overlapLines,
-    maxParallelChunks: draft.maxParallelChunks,
+    maxParallelChunks: actualMaxParallel,
+    parallelMultiplier: multiplier,
     autoSplit: draft.autoSplit,
   };
 

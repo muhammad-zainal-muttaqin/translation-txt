@@ -440,6 +440,7 @@ export function getDefaultDraft(): DraftSettings {
     maxCharsPerChunk: 9000,
     overlapLines: 2,
     maxParallelChunks: 3,
+    parallelMultiplier: 1, // Default 1x (3 parallel chunks)
     maxOutputTokens: 65536,
   }
 }

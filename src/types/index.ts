@@ -20,6 +20,7 @@ export interface DraftSettings {
   maxCharsPerChunk: number;
   overlapLines: number;
   maxParallelChunks: number;
+  parallelMultiplier: number; // 1x, 2x, 3x, 4x, 5x, 10x, 20x, 100x
   maxOutputTokens: number;
 }
 
@@ -60,6 +61,7 @@ export interface ChunkConfig {
   maxCharsPerChunk: number;
   overlapLines: number;
   maxParallelChunks: number;
+  parallelMultiplier: number; // Applied to maxParallelChunks for dynamic scaling
   autoSplit: boolean;
 }
 

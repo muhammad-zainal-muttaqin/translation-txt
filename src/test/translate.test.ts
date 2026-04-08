@@ -62,6 +62,7 @@ describe('Parallel Translation', () => {
     maxCharsPerChunk: 1000,
     overlapLines: 0,
     maxParallelChunks: 3,
+    parallelMultiplier: 1,
     maxOutputTokens: 65536,
   };
 
@@ -322,6 +323,7 @@ describe('Parallel Translation', () => {
           maxCharsPerChunk: 1000,
           overlapLines: 0,
           maxParallelChunks: 3,
+          parallelMultiplier: 1,
           autoSplit: true,
         },
         chunks,

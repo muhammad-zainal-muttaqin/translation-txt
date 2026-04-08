@@ -2,7 +2,9 @@ import { useApp } from '../contexts/AppContext'
 import { Button } from './ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
 import { Progress } from './ui/progress'
-import { Play, Pause, CheckCircle, XCircle, AlertCircle, Clock, Loader2 } from 'lucide-react'
+import { Play, Pause, CheckCircle, XCircle, AlertCircle, Clock, Loader2, Zap } from 'lucide-react'
+
+const MULTIPLIER_OPTIONS = [1, 2, 3, 4, 5, 10, 20, 100] as const
 
 export function RunPanel() {
   const { state } = useApp()
@@ -108,6 +110,44 @@ export function RunPanel() {
               {formatEta(progress.etaSeconds || activeRun?.progress?.etaSeconds || null)}
             </p>
           </div>
+        </div>
+
+        {/* Parallel Speed Multiplier Control */}
+        <div className="border-t pt-4">
+          <div className="flex items-center gap-2 mb-2">
+            <Zap className="h-4 w-4 text-primary" />
+            <span className="font-medium text-sm">Speed Multiplier</span>
+            <span className="text-xs text-muted-foreground ml-auto">
+              Base: {state.draft?.maxParallelChunks || 3} chunks × {state.draft?.parallelMultiplier || 1}x = <strong>{maxParallel} chunks</strong>
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-1.5 sm:gap-2">
+            {MULTIPLIER_OPTIONS.map((mult) => (
+              <button
+                key={mult}
+                onClick={() => {
+                  if (!state.isTranslating && state.draft) {
+                    const updatedDraft = { ...state.draft, parallelMultiplier: mult }
+                    // @ts-ignore - dispatch will be handled by parent
+                    state.dispatch?.({ type: 'SET_DRAFT', payload: updatedDraft })
+                  }
+                }}
+                disabled={state.isTranslating}
+                className={`
+                  px-2 py-1 rounded text-xs sm:text-sm font-medium transition-colors
+                  ${(state.draft?.parallelMultiplier || 1) === mult 
+                    ? 'bg-primary text-primary-foreground' 
+                    : 'bg-muted text-muted-foreground hover:bg-muted/80'}
+                  ${state.isTranslating ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+                `}
+              >
+                {mult}x
+              </button>
+            ))}
+          </div>
+          <p className="text-[10px] sm:text-xs text-muted-foreground mt-2">
+            Higher multiplier = faster translation but may hit rate limits. Change only when not translating.
+          </p>
         </div>
 
         {activeRun?.chunks && activeRun.chunks.length > 0 && (
