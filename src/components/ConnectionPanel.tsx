@@ -29,6 +29,16 @@ const PRESET_OPTIONS: Record<string, { value: string; label: string }[]> = {
   ],
 }
 
+const PRESET_ENDPOINTS: Record<string, string> = {
+  'openrouter': 'https://openrouter.ai/api/v1/chat/completions',
+  'fireworks-openai': 'https://api.fireworks.ai/inference/v1/chat/completions',
+  'xai': 'https://api.x.ai/v1/chat/completions',
+  'minimax-openai': 'https://api.minimax.io/v1/chat/completions',
+  'openai': 'https://api.openai.com/v1/chat/completions',
+  'anthropic': 'https://api.anthropic.com/v1/messages',
+  'gemini': 'https://generativelanguage.googleapis.com/v1beta/models',
+}
+
 export function ConnectionPanel() {
   const { state, dispatch } = useApp()
   const [showAdvanced, setShowAdvanced] = useState(false)
@@ -64,7 +74,16 @@ export function ConnectionPanel() {
             <select
               id="provider-protocol"
               value={state.draft?.providerProtocol || 'openai-compatible'}
-              onChange={(e) => updateDraft({ providerProtocol: e.target.value })}
+              onChange={(e) => {
+                const newProtocol = e.target.value
+                const firstPreset = PRESET_OPTIONS[newProtocol]?.[0]?.value || ''
+                const newEndpoint = firstPreset ? (PRESET_ENDPOINTS[firstPreset] || '') : ''
+                updateDraft({ 
+                  providerProtocol: newProtocol,
+                  providerPreset: firstPreset,
+                  endpointUrl: newEndpoint
+                })
+              }}
               className="w-full mt-1 p-2 border rounded-md bg-background"
             >
               {PROTOCOL_OPTIONS.map((opt) => (
@@ -80,7 +99,13 @@ export function ConnectionPanel() {
             <select
               id="provider-preset"
               value={state.draft?.providerPreset || 'openrouter'}
-              onChange={(e) => updateDraft({ providerPreset: e.target.value })}
+              onChange={(e) => {
+                const newPreset = e.target.value
+                updateDraft({ 
+                  providerPreset: newPreset,
+                  endpointUrl: PRESET_ENDPOINTS[newPreset] || ''
+                })
+              }}
               className="w-full mt-1 p-2 border rounded-md bg-background"
             >
               {presets.map((opt) => (
