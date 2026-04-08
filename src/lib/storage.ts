@@ -1,4 +1,4 @@
-import { Settings, DraftSettings, ActiveRun } from '../types';
+import { Settings, DraftSettings, ActiveRun, SavedProviderProfile, LogEntry } from '../types';
 import { STORAGE_KEYS } from '../types';
 
 export function loadSettings(): Settings {
@@ -60,4 +60,85 @@ export function getDraftFromSettings(settings: Settings, protocol: string, prese
     return settings.rememberedDraft;
   }
   return null;
+}
+
+export function saveProviderProfile(profile: SavedProviderProfile, settings: Settings): Settings {
+  const existing = settings.savedProfiles.findIndex(p => p.id === profile.id);
+  if (existing >= 0) {
+    settings.savedProfiles[existing] = profile;
+  } else {
+    settings.savedProfiles.push(profile);
+  }
+  saveSettings(settings);
+  return settings;
+}
+
+export function deleteProviderProfile(profileId: string, settings: Settings): Settings {
+  settings.savedProfiles = settings.savedProfiles.filter(p => p.id !== profileId);
+  saveSettings(settings);
+  return settings;
+}
+
+export function saveRememberedDraft(draft: DraftSettings, settings: Settings): Settings {
+  settings.rememberedDraft = draft;
+  saveSettings(settings);
+  return settings;
+}
+
+export function clearRememberedDraft(settings: Settings): Settings {
+  settings.rememberedDraft = null;
+  saveSettings(settings);
+  return settings;
+}
+
+export function normalizeRunOnLoad(run: ActiveRun): ActiveRun {
+  const inFlightStates = ['running', 'paused', 'aborted'];
+  
+  if (inFlightStates.includes(run.status)) {
+    run.status = 'paused';
+  }
+  
+  return run;
+}
+
+export function generateRunId(): string {
+  return `run_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+}
+
+export function getSessionLogs(): LogEntry[] {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEYS.session);
+    if (stored) {
+      return JSON.parse(stored);
+    }
+  } catch (e) {
+    console.error('Failed to load session logs:', e);
+  }
+  return [];
+}
+
+export function saveSessionLogs(logs: LogEntry[]): void {
+  try {
+    localStorage.setItem(STORAGE_KEYS.session, JSON.stringify(logs.slice(-500)));
+  } catch (e) {
+    console.error('Failed to save session logs:', e);
+  }
+}
+
+export function addSessionLog(message: string, level: LogEntry['level'] = 'info'): void {
+  const logs = getSessionLogs();
+  logs.push({
+    timestamp: Date.now(),
+    level,
+    message,
+  });
+  saveSessionLogs(logs);
+}
+
+export function clearSessionLogs(): void {
+  try {
+    localStorage.removeItem(STORAGE_KEYS.session);
+  } catch (e) {
+    console.error('Failed to clear session logs:', e);
+  }
 }

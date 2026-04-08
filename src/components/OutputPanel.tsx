@@ -2,6 +2,8 @@ import { useApp } from '../contexts/AppContext'
 import { Button } from './ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
 import { FileText, Download, Copy, Maximize2 } from 'lucide-react'
+import { downloadSingleFile, downloadZip, generateTranslatedFilename, copyToClipboard } from '../lib/download'
+import { useState } from 'react'
 
 interface OutputPanelProps {
   onExpandPreview: () => void
@@ -9,22 +11,58 @@ interface OutputPanelProps {
 
 export function OutputPanel({ onExpandPreview }: OutputPanelProps) {
   const { state } = useApp()
+  const [copySuccess, setCopySuccess] = useState(false)
+
   const hasOutput = state.translationOutput.length > 0
+  const originalChunks = state.activeRun?.chunks.map(c => c.original) || []
+  const translatedChunks = state.activeRun?.chunks.map(c => c.translatedCore) || []
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(state.translationOutput)
+    const success = await copyToClipboard(state.translationOutput)
+    if (success) {
+      setCopySuccess(true)
+      setTimeout(() => setCopySuccess(false), 2000)
+    }
   }
 
   const handleDownloadSingle = () => {
-    const blob = new Blob([state.translationOutput], { type: 'text/plain' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    const originalName = state.file?.name || 'translated.txt'
-    const baseName = originalName.replace(/\.[^/.]+$/, '')
-    a.download = `${baseName}.${state.file?.format || 'txt'}`
-    a.click()
-    URL.revokeObjectURL(url)
+    if (!state.file || !state.translationOutput) return
+
+    const filename = generateTranslatedFilename(
+      state.file.name,
+      state.draft?.targetLanguage || 'en'
+    )
+
+    downloadSingleFile({
+      filename,
+      content: state.translationOutput,
+    })
+  }
+
+  const handleDownloadZip = async () => {
+    if (!state.file || translatedChunks.length === 0) return
+
+    const targetLang = state.draft?.targetLanguage || 'en'
+    const originalName = state.file.name
+    const translatedName = generateTranslatedFilename(originalName, targetLang)
+
+    await downloadZip({
+      filename: 'translation_' + Date.now() + '.zip',
+      files: [
+        { name: 'original/' + originalName, content: state.file.content },
+        { name: 'translated/' + translatedName, content: state.translationOutput },
+      ],
+      metadata: {
+        originalFile: originalName,
+        translatedFile: translatedName,
+        sourceLanguage: state.draft?.sourceLanguage || 'auto',
+        targetLanguage: targetLang,
+        translationDate: new Date().toISOString(),
+        totalChunks: translatedChunks.length,
+        provider: state.draft?.providerPreset || state.draft?.providerProtocol,
+        model: state.draft?.model,
+      },
+    })
   }
 
   return (
@@ -67,13 +105,21 @@ export function OutputPanel({ onExpandPreview }: OutputPanelProps) {
             <Download className="h-4 w-4 mr-1" />
             Download translated file
           </Button>
-          <Button variant="ghost" disabled={!hasOutput}>
+          <Button 
+            variant="ghost" 
+            disabled={!hasOutput || translatedChunks.length === 0}
+            onClick={handleDownloadZip}
+          >
             <Download className="h-4 w-4 mr-1" />
             Download ZIP
           </Button>
-          <Button variant="ghost" disabled={!hasOutput} onClick={handleCopy}>
+          <Button 
+            variant="ghost" 
+            disabled={!hasOutput} 
+            onClick={handleCopy}
+          >
             <Copy className="h-4 w-4 mr-1" />
-            Copy translation
+            {copySuccess ? 'Copied!' : 'Copy translation'}
           </Button>
         </div>
       </CardContent>

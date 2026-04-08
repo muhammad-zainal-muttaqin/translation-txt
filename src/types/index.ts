@@ -48,6 +48,8 @@ export interface FileState {
   content: string;
 }
 
+export type FileFormat = 'txt' | 'csv' | 'md' | 'json' | 'log' | 'srt' | 'vtt' | 'xml' | 'yaml' | 'yml';
+
 export interface ChunkConfig {
   sourceLanguage: string;
   targetLanguage: string;
@@ -234,3 +236,4 @@ export const PROTOCOL_LABELS: Record<string, string> = {
 export const LINE_ORIENTED_FORMATS = new Set(["txt", "md", "log", "srt", "vtt"]);
 export const NOVEL_MODE_FORMATS = new Set(["txt", "md"]);
 export const STRUCTURED_FORMATS = new Set(["csv", "json", "xml", "yaml", "yml"]);
+export const ALLOWED_FORMATS = new Set(["txt", "csv", "md", "json", "log", "srt", "vtt", "xml", "yaml", "yml"]);

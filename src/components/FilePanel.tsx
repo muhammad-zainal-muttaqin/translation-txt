@@ -5,6 +5,8 @@ import { Label } from './ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
 import { Upload, FileText } from 'lucide-react'
 import { FORMAT_LABELS } from '../types'
+import { detectFormat } from '../lib/format'
+import { validateFile } from '../lib/validation'
 
 const ALLOWED_EXTENSIONS = ['.txt', '.csv', '.md', '.json', '.log', '.srt', '.vtt', '.xml', '.yaml', '.yml']
 
@@ -21,22 +23,26 @@ export function FilePanel() {
     const ext = selectedFile.name.split('.').pop()?.toLowerCase() || ''
     const lineCount = content.split('\n').length
 
+    const format = detectFormat(selectedFile.name, content)
+
     const fileState = {
       name: selectedFile.name,
-      format: ext,
+      format,
       size: selectedFile.size,
       lineCount,
       content,
     }
 
     dispatch({ type: 'SET_FILE', payload: fileState })
-    dispatch({ type: 'SET_FILE_PREFLIGHT_ISSUES', payload: [] })
+
+    const validation = validateFile(fileState)
+    dispatch({ type: 'SET_FILE_PREFLIGHT_ISSUES', payload: validation.issues })
   }
 
   const formatSize = (bytes: number) => {
-    if (bytes < 1024) return `${bytes} B`
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+    if (bytes < 1024) return bytes + ' B'
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
   }
 
   return (
@@ -93,13 +99,13 @@ export function FilePanel() {
             {issues.map((issue, i) => (
               <div
                 key={i}
-                className={`p-3 rounded-md text-sm ${
+                className={
                   issue.level === 'error'
-                    ? 'bg-destructive/10 text-destructive'
+                    ? 'p-3 rounded-md text-sm bg-destructive/10 text-destructive'
                     : issue.level === 'warning'
-                    ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
-                    : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
-                }`}
+                    ? 'p-3 rounded-md text-sm bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+                    : 'p-3 rounded-md text-sm bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+                }
               >
                 {issue.message}
               </div>

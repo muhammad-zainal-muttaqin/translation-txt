@@ -1,4 +1,4 @@
-import { createContext, useContext, useReducer, ReactNode } from 'react'
+import { createContext, useContext, useReducer, useRef, ReactNode, useCallback } from 'react'
 import type {
   Settings,
   DraftSettings,
@@ -11,6 +11,8 @@ import type {
   ChunkRecord,
 } from '../types'
 import { DEFAULT_INSTRUCTION } from '../types'
+import { startTranslation, pauseTranslation, cancelTranslation, discardActiveRun as discardRun } from '../lib/translate'
+import { loadSettings, saveSettings, loadActiveRun, saveActiveRun, getSessionLogs, addSessionLog } from '../lib/storage'
 
 interface AppState {
   settings: Settings
@@ -49,32 +51,34 @@ type AppAction =
   | { type: 'ADD_LOG'; payload: LogEntry }
   | { type: 'SET_PROGRESS'; payload: { percent: number; currentChunk: number; totalChunks: number } }
   | { type: 'UPDATE_CHUNK'; payload: { index: number; chunk: ChunkRecord } }
+  | { type: 'SET_LOGS'; payload: LogEntry[] }
   | { type: 'RESET' }
 
-const initialState: AppState = {
-  settings: {
-    version: 1,
-    migrationVersion: 1,
-    rememberedDraft: null,
-    savedProfiles: [],
-  },
-  draft: null,
-  file: null,
-  chunkConfig: null,
-  originalChunks: [],
-  translatedChunks: [],
-  translationOutput: '',
-  filePreflightIssues: [],
-  finalValidationIssues: [],
-  isTranslating: false,
-  activeRun: null,
-  activePanel: 'file',
-  logs: [],
-  progress: {
-    percent: 0,
-    currentChunk: 0,
-    totalChunks: 0,
-  },
+function loadInitialState(): AppState {
+  const settings = loadSettings()
+  const activeRun = loadActiveRun()
+  const logs = getSessionLogs()
+
+  return {
+    settings,
+    draft: settings.rememberedDraft,
+    file: activeRun?.file || null,
+    chunkConfig: activeRun?.config || null,
+    originalChunks: activeRun?.chunks.map(c => c.original) || [],
+    translatedChunks: activeRun?.chunks.map(c => c.translatedCore) || [],
+    translationOutput: '',
+    filePreflightIssues: [],
+    finalValidationIssues: activeRun?.finalValidationIssues || [],
+    isTranslating: false,
+    activeRun,
+    activePanel: 'file',
+    logs,
+    progress: {
+      percent: activeRun?.progress.percent || 0,
+      currentChunk: activeRun?.processedChunks || 0,
+      totalChunks: activeRun?.totalChunks || 0,
+    },
+  }
 }
 
 function appReducer(state: AppState, action: AppAction): AppState {
@@ -105,6 +109,8 @@ function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, activePanel: action.payload }
     case 'ADD_LOG':
       return { ...state, logs: [...state.logs, action.payload] }
+    case 'SET_LOGS':
+      return { ...state, logs: action.payload }
     case 'SET_PROGRESS':
       return { ...state, progress: action.payload }
     case 'RESET':
@@ -114,18 +120,156 @@ function appReducer(state: AppState, action: AppAction): AppState {
   }
 }
 
+const initialState: AppState = {
+  settings: {
+    version: 1,
+    migrationVersion: 1,
+    rememberedDraft: null,
+    savedProfiles: [],
+  },
+  draft: null,
+  file: null,
+  chunkConfig: null,
+  originalChunks: [],
+  translatedChunks: [],
+  translationOutput: '',
+  filePreflightIssues: [],
+  finalValidationIssues: [],
+  isTranslating: false,
+  activeRun: null,
+  activePanel: 'file',
+  logs: [],
+  progress: {
+    percent: 0,
+    currentChunk: 0,
+    totalChunks: 0,
+  },
+}
+
 interface AppContextType {
   state: AppState
   dispatch: React.Dispatch<AppAction>
+  actions: {
+    startTranslation: () => Promise<void>
+    pauseTranslation: () => void
+    cancelTranslation: () => void
+    discardActiveRun: () => void
+    clearWorkspace: () => void
+  }
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined)
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(appReducer, initialState)
+  const [state, dispatch] = useReducer(appReducer, initialState, loadInitialState)
+  const abortControllerRef = useRef<AbortController | null>(null)
+
+  const actions = {
+    startTranslation: useCallback(async () => {
+      if (!state.file || !state.draft) {
+        addSessionLog('File or draft not configured', 'error')
+        return
+      }
+
+      abortControllerRef.current = new AbortController()
+      dispatch({ type: 'SET_IS_TRANSLATING', payload: true })
+
+      try {
+        await startTranslation(
+          {
+            file: state.file,
+            draft: state.draft,
+            abortSignal: abortControllerRef.current.signal,
+          },
+          {
+            onChunkStart: (index) => {
+              addSessionLog('Chunk ' + (index + 1) + ' started', 'info')
+            },
+            onChunkComplete: (index, _result) => {
+              addSessionLog('Chunk ' + (index + 1) + ' completed', 'info')
+              const run = loadActiveRun()
+              if (run) {
+                dispatch({ type: 'SET_ACTIVE_RUN', payload: run })
+              }
+            },
+            onChunkError: (index, error) => {
+              addSessionLog('Chunk ' + (index + 1) + ' error: ' + error, 'error')
+            },
+            onProgress: (progress) => {
+              dispatch({
+                type: 'SET_PROGRESS',
+                payload: {
+                  percent: progress.percent,
+                  currentChunk: progress.currentChunk,
+                  totalChunks: progress.totalChunks,
+                },
+              })
+            },
+            onComplete: (output) => {
+              dispatch({ type: 'SET_TRANSLATION_OUTPUT', payload: output })
+              addSessionLog('Translation completed', 'info')
+              const run = loadActiveRun()
+              if (run) {
+                dispatch({ type: 'SET_ACTIVE_RUN', payload: run })
+              }
+            },
+            onError: (error) => {
+              addSessionLog('Translation error: ' + error, 'error')
+            },
+          }
+        )
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : 'Unknown error'
+        addSessionLog('Translation failed: ' + errorMsg, 'error')
+      } finally {
+        dispatch({ type: 'SET_IS_TRANSLATING', payload: false })
+        abortControllerRef.current = null
+      }
+    }, [state.file, state.draft]),
+
+    pauseTranslation: useCallback(() => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
+      pauseTranslation()
+      dispatch({ type: 'SET_IS_TRANSLATING', payload: false })
+      const run = loadActiveRun()
+      if (run) {
+        dispatch({ type: 'SET_ACTIVE_RUN', payload: run })
+      }
+    }, []),
+
+    cancelTranslation: useCallback(() => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
+      cancelTranslation()
+      dispatch({ type: 'SET_IS_TRANSLATING', payload: false })
+      const run = loadActiveRun()
+      if (run) {
+        dispatch({ type: 'SET_ACTIVE_RUN', payload: run })
+      }
+    }, []),
+
+    discardActiveRun: useCallback(() => {
+      discardRun()
+      dispatch({ type: 'SET_ACTIVE_RUN', payload: null })
+      dispatch({
+        type: 'SET_PROGRESS',
+        payload: { percent: 0, currentChunk: 0, totalChunks: 0 },
+      })
+      addSessionLog('Active run discarded', 'info')
+    }, []),
+
+    clearWorkspace: useCallback(() => {
+      discardRun()
+      dispatch({ type: 'RESET' })
+      addSessionLog('Workspace cleared', 'info')
+    }, []),
+  }
 
   return (
-    <AppContext.Provider value={{ state, dispatch }}>
+    <AppContext.Provider value={{ state, dispatch, actions }}>
       {children}
     </AppContext.Provider>
   )

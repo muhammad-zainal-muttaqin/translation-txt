@@ -4,7 +4,7 @@ import { Button } from './ui/button'
 const STEPS = ['file', 'languages', 'connection', 'run'] as const
 
 export function FirstRunStrip() {
-  const { state, dispatch } = useApp()
+  const { state, dispatch, actions } = useApp()
   const activePanel = state.activePanel
 
   const getStepStatus = (step: typeof STEPS[number]) => {
@@ -19,6 +19,26 @@ export function FirstRunStrip() {
         return state.activeRun ? 'complete' : 'pending'
       default:
         return 'pending'
+    }
+  }
+
+  const handleStartTranslation = async () => {
+    await actions.startTranslation()
+  }
+
+  const handlePause = () => {
+    actions.pauseTranslation()
+  }
+
+  const handleDiscard = () => {
+    if (confirm('Are you sure you want to discard the saved run?')) {
+      actions.discardActiveRun()
+    }
+  }
+
+  const handleClear = () => {
+    if (confirm('Are you sure you want to clear the workspace? All progress will be lost.')) {
+      actions.clearWorkspace()
     }
   }
 
@@ -51,20 +71,44 @@ export function FirstRunStrip() {
 
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <p id="status-message" className="text-sm">
-            {state.file ? 'Ready to translate.' : 'Add a file to get started.'}
+            {state.file 
+              ? state.isTranslating 
+                ? 'Translating...' 
+                : state.translationOutput 
+                  ? 'Translation complete.' 
+                  : 'Ready to translate.'
+              : 'Add a file to get started.'}
           </p>
           
           <div className="flex gap-2 ml-auto">
-            <Button id="start-translation" disabled={!state.file || state.isTranslating}>
+            <Button 
+              id="start-translation" 
+              disabled={!state.file || state.isTranslating} 
+              onClick={handleStartTranslation}
+            >
               Start translation
             </Button>
-            <Button id="cancel-translation" variant="secondary" disabled={!state.isTranslating}>
-              Pause
+            <Button 
+              id="cancel-translation" 
+              variant="secondary" 
+              disabled={!state.isTranslating}
+              onClick={handlePause}
+            >
+              {state.activeRun?.status === 'paused' ? 'Resume' : 'Pause'}
             </Button>
-            <Button id="discard-saved-run" variant="ghost" disabled={!state.activeRun}>
+            <Button 
+              id="discard-saved-run" 
+              variant="ghost" 
+              disabled={!state.activeRun}
+              onClick={handleDiscard}
+            >
               Discard saved run
             </Button>
-            <Button id="clear-all" variant="ghost">
+            <Button 
+              id="clear-all" 
+              variant="ghost"
+              onClick={handleClear}
+            >
               Clear workspace
             </Button>
           </div>
