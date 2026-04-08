@@ -58,12 +58,14 @@ export async function downloadZip(options: ZipOptions): Promise<void> {
 
 export function generateTranslatedFilename(
   originalFilename: string,
-  targetLanguage: string
+  targetLanguage: string,
+  isPartial = false
 ): string {
   const languageSuffix = getLanguageSuffix(targetLanguage);
+  const partialSuffix = isPartial ? '-partial' : '';
   const baseName = originalFilename.replace(/\.[^/.]+$/, '');
   const extension = originalFilename.split('.').pop() || 'txt';
-  return `${baseName}-${languageSuffix}.${extension}`;
+  return `${baseName}-${languageSuffix}${partialSuffix}.${extension}`;
 }
 
 export function getLanguageSuffix(languageCode: string): string {

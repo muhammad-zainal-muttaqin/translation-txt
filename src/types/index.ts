@@ -118,15 +118,23 @@ export interface ActiveRun {
   progress: RunProgress;
 }
 
-export type RunStatus = 
-  | "pending" 
-  | "running" 
-  | "paused" 
-  | "completed" 
+export type RunStatus =
+  | "pending"
+  | "running"
+  | "paused"
+  | "completed"
   | "completed-review-required"
-  | "aborted" 
+  | "aborted"
   | "failed"
   | "cancelled";
+
+export interface OutputView {
+  mode: 'empty' | 'complete' | 'partial';
+  text: string;
+  successfulChunks: number;
+  totalChunks: number;
+  runStatus: RunStatus | null;
+}
 
 export interface RunProgress {
   percent: number;

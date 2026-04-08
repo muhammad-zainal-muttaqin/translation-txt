@@ -575,6 +575,9 @@ export async function startTranslation(
   const multiplier = draft.parallelMultiplier || 1;
   const actualMaxParallel = Math.min(100, baseParallel * multiplier);
 
+  // Diagnostic: log effective timeout and parallelism settings
+  addSessionLog(`[Diagnostic] Chunk timeout: ${CHUNK_TIMEOUT_MS / 1000}s, Effective parallel chunks: ${actualMaxParallel}`, 'info');
+
   const chunkConfig: ChunkConfig = {
     sourceLanguage: draft.sourceLanguage === 'custom' ? draft.sourceLanguageCustom : draft.sourceLanguage,
     targetLanguage: draft.targetLanguage === 'custom' ? draft.targetLanguageCustom : draft.targetLanguage,
@@ -652,6 +655,12 @@ export async function resumeTranslation(
   callbacks: TranslationCallbacks
 ): Promise<void> {
   const { run, draft, abortSignal } = config;
+
+  // Diagnostic: log effective timeout and parallelism settings
+  const baseParallel = draft.maxParallelChunks || 3;
+  const multiplier = draft.parallelMultiplier || 1;
+  const effectiveParallel = Math.min(100, baseParallel * multiplier);
+  addSessionLog(`[Diagnostic] Chunk timeout: ${CHUNK_TIMEOUT_MS / 1000}s, Effective parallel chunks: ${effectiveParallel}`, 'info');
 
   addSessionLog('Resuming translation...', 'info');
 

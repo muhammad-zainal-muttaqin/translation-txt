@@ -79,13 +79,47 @@ export function FirstRunStrip() {
           {/* Bottom row - Status and Actions */}
           <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
             <p id="status-message" className="text-xs sm:text-sm text-muted-foreground">
-              {state.file 
-                ? state.isTranslating 
-                  ? 'Translating...' 
-                  : state.translationOutput 
-                    ? 'Translation complete.' 
-                    : 'Ready to translate.'
-                : 'Add a file to get started.'}
+              {(() => {
+                // No file loaded
+                if (!state.file) {
+                  return 'Add a file to get started.'
+                }
+
+                // Currently translating
+                if (state.isTranslating) {
+                  if (state.outputView.mode === 'partial') {
+                    return `Partial translation available (${state.outputView.successfulChunks}/${state.outputView.totalChunks} chunks) while translation continues...`
+                  }
+                  return 'Translating...'
+                }
+
+                // No active run - ready to translate
+                if (!state.activeRun) {
+                  return 'Ready to translate.'
+                }
+
+                // Has partial output
+                if (state.outputView.mode === 'partial') {
+                  const runStatus = state.outputView.runStatus
+                  if (runStatus === 'running') {
+                    return `Partial translation available (${state.outputView.successfulChunks}/${state.outputView.totalChunks} chunks) while translation continues.`
+                  }
+                  return `Partial translation available (${state.outputView.successfulChunks}/${state.outputView.totalChunks} chunks completed before ${runStatus}).`
+                }
+
+                // Failed without any successful chunks
+                if (state.activeRun.status === 'failed' && state.outputView.mode === 'empty') {
+                  return 'Translation failed before any chunk completed.'
+                }
+
+                // Completed
+                if (state.outputView.mode === 'complete') {
+                  return 'Translation complete.'
+                }
+
+                // Default fallback
+                return 'Ready to translate.'
+              })()}
             </p>
             
             <div className="flex flex-wrap gap-1.5 sm:gap-2 sm:ml-auto">

@@ -14,11 +14,12 @@ export function OutputPanel({ onExpandPreview }: OutputPanelProps) {
   const { state } = useApp()
   const [copySuccess, setCopySuccess] = useState(false)
 
-  const hasOutput = state.translationOutput.length > 0
+  const hasOutput = state.outputView.text.length > 0
   const totalChunks = state.activeRun?.chunks.length || 0
+  const isPartial = state.outputView.mode === 'partial'
 
   const handleCopy = async () => {
-    const success = await copyToClipboard(state.translationOutput)
+    const success = await copyToClipboard(state.outputView.text)
     if (success) {
       setCopySuccess(true)
       setTimeout(() => setCopySuccess(false), 2000)
@@ -26,16 +27,17 @@ export function OutputPanel({ onExpandPreview }: OutputPanelProps) {
   }
 
   const handleDownloadSingle = () => {
-    if (!state.file || !state.translationOutput) return
+    if (!state.file || !state.outputView.text) return
 
     const filename = generateTranslatedFilename(
       state.file.name,
-      state.draft?.targetLanguage || 'en'
+      state.draft?.targetLanguage || 'en',
+      isPartial
     )
 
     downloadSingleFile({
       filename,
-      content: state.translationOutput,
+      content: state.outputView.text,
     })
   }
 
@@ -44,24 +46,35 @@ export function OutputPanel({ onExpandPreview }: OutputPanelProps) {
 
     const targetLang = state.draft?.targetLanguage || 'en'
     const originalName = state.file.name
-    const translatedName = generateTranslatedFilename(originalName, targetLang)
+    const translatedName = generateTranslatedFilename(originalName, targetLang, isPartial)
+
+    const metadata: Record<string, unknown> = {
+      originalFile: originalName,
+      translatedFile: translatedName,
+      sourceLanguage: state.draft?.sourceLanguage || 'auto',
+      targetLanguage: targetLang,
+      translationDate: new Date().toISOString(),
+      totalChunks,
+      provider: state.draft?.providerPreset || state.draft?.providerProtocol,
+      model: state.draft?.model,
+    }
+
+    // Add partial output metadata if applicable
+    if (state.outputView.mode === 'partial') {
+      metadata.isPartial = true
+      metadata.partialMode = 'success-only'
+      metadata.runStatus = state.outputView.runStatus
+      metadata.successfulChunks = state.outputView.successfulChunks
+      metadata.totalChunks = state.outputView.totalChunks
+    }
 
     await downloadZip({
       filename: 'translation_' + Date.now() + '.zip',
       files: [
         { name: 'original/' + originalName, content: state.file.content },
-        { name: 'translated/' + translatedName, content: state.translationOutput },
+        { name: 'translated/' + translatedName, content: state.outputView.text },
       ],
-      metadata: {
-        originalFile: originalName,
-        translatedFile: translatedName,
-        sourceLanguage: state.draft?.sourceLanguage || 'auto',
-        targetLanguage: targetLang,
-        translationDate: new Date().toISOString(),
-        totalChunks,
-        provider: state.draft?.providerPreset || state.draft?.providerProtocol,
-        model: state.draft?.model,
-      },
+      metadata,
     })
   }
 
@@ -74,6 +87,12 @@ export function OutputPanel({ onExpandPreview }: OutputPanelProps) {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3 sm:space-y-4">
+        {isPartial && (
+          <div className="p-2 bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 text-xs sm:text-sm rounded">
+            <strong>Partial translation available:</strong> {state.outputView.successfulChunks} of {state.outputView.totalChunks} chunks completed ({state.outputView.runStatus}).
+          </div>
+        )}
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <h4 className="text-sm font-medium mb-2">Original</h4>
@@ -86,7 +105,7 @@ export function OutputPanel({ onExpandPreview }: OutputPanelProps) {
           <div>
             <h4 className="text-sm font-medium mb-2">Translated</h4>
             <LargeTextPreview
-              text={state.translationOutput}
+              text={state.outputView.text}
               emptyMessage="No translation yet."
               className="p-3 bg-muted rounded-md text-xs overflow-auto max-h-64 whitespace-pre-wrap"
             />

@@ -8,6 +8,8 @@ import type {
   WorkspacePanelId,
   LogEntry,
   ValidationIssue,
+  OutputView,
+  RunStatus,
 } from '../types'
 import { DEFAULT_INSTRUCTION } from '../types'
 import { startTranslation, pauseTranslation, cancelTranslation, discardActiveRun as discardRun, resumeTranslation } from '../lib/translate'
@@ -63,6 +65,7 @@ interface AppState {
     completedChunks: number
     etaSeconds: number | null
   }
+  outputView: OutputView
 }
 
 type AppAction =
@@ -79,9 +82,74 @@ type AppAction =
   | { type: 'ADD_LOG'; payload: LogEntry }
   | { type: 'SET_PROGRESS'; payload: { percent: number; currentChunk: number; totalChunks: number; runningChunks: number[]; completedChunks: number; etaSeconds: number | null } }
   | { type: 'SET_LOGS'; payload: LogEntry[] }
+  | { type: 'SET_OUTPUT_VIEW'; payload: OutputView }
   | { type: 'RESET' }
 
 const COMPLETED_RUN_STATUSES = new Set(['completed', 'completed-review-required'])
+const PARTIAL_ELIGIBLE_STATUSES = new Set(['running', 'paused', 'failed', 'cancelled', 'aborted'])
+
+function buildPartialOutput(run: ActiveRun): string {
+  const successfulChunks = run.chunks.filter(
+    (chunk) => chunk.status === 'success' || chunk.status === 'truncated'
+  )
+
+  if (successfulChunks.length === 0) {
+    return ''
+  }
+
+  return successfulChunks
+    .map((chunk) => {
+      const header = `[Chunk ${chunk.index + 1}/${run.totalChunks} | ${chunk.status}]`
+      return `${header}\n${chunk.translatedCore}`
+    })
+    .join('\n\n')
+}
+
+function getOutputViewFromRun(run: ActiveRun | null): OutputView {
+  if (!run) {
+    return { mode: 'empty', text: '', successfulChunks: 0, totalChunks: 0, runStatus: null }
+  }
+
+  const successfulChunks = run.chunks.filter(
+    (chunk) => chunk.status === 'success' || chunk.status === 'truncated'
+  ).length
+
+  // Complete output for completed runs
+  if (COMPLETED_RUN_STATUSES.has(run.status)) {
+    const text = mergeChunks(
+      run.chunks.map((chunk) => chunk.translatedCore),
+      run.config.overlapLines,
+      run.file.format
+    )
+    return {
+      mode: 'complete',
+      text,
+      successfulChunks,
+      totalChunks: run.totalChunks,
+      runStatus: run.status,
+    }
+  }
+
+  // Partial output for running, paused, failed, cancelled runs with successful chunks
+  if (PARTIAL_ELIGIBLE_STATUSES.has(run.status) && successfulChunks > 0) {
+    return {
+      mode: 'partial',
+      text: buildPartialOutput(run),
+      successfulChunks,
+      totalChunks: run.totalChunks,
+      runStatus: run.status,
+    }
+  }
+
+  // Empty if no successful chunks
+  return {
+    mode: 'empty',
+    text: '',
+    successfulChunks,
+    totalChunks: run.totalChunks,
+    runStatus: run.status,
+  }
+}
 
 function getSanitizedRememberedDraft(draft: DraftSettings): DraftSettings {
   return {
@@ -100,6 +168,10 @@ function getTranslationOutputFromRun(run: ActiveRun | null): string {
     run.config.overlapLines,
     run.file.format
   )
+}
+
+function runStatusFromRun(run: ActiveRun | null): RunStatus | null {
+  return run?.status ?? null
 }
 
 function loadInitialState(): AppState {
@@ -121,7 +193,8 @@ function loadInitialState(): AppState {
   // Ensure we always have a valid draft, never null
   const draft = settings.rememberedDraft || createDefaultDraft()
   const translationOutput = getTranslationOutputFromRun(activeRun)
-  
+  const outputView = getOutputViewFromRun(activeRun)
+
   return {
     settings,
     draft,
@@ -142,6 +215,7 @@ function loadInitialState(): AppState {
       completedChunks: activeRun?.processedChunks || 0,
       etaSeconds: activeRun?.progress.etaSeconds || null,
     },
+    outputView,
   }
 }
 
@@ -172,8 +246,10 @@ function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, finalValidationIssues: action.payload }
     case 'SET_IS_TRANSLATING':
       return { ...state, isTranslating: action.payload }
-    case 'SET_ACTIVE_RUN':
-      return { ...state, activeRun: action.payload }
+    case 'SET_ACTIVE_RUN': {
+      const outputView = getOutputViewFromRun(action.payload)
+      return { ...state, activeRun: action.payload, outputView }
+    }
     case 'SET_ACTIVE_PANEL':
       return { ...state, activePanel: action.payload }
     case 'ADD_LOG': {
@@ -182,13 +258,14 @@ function appReducer(state: AppState, action: AppAction): AppState {
     }
     case 'SET_LOGS':
       return { ...state, logs: action.payload }
-    case 'SET_PROGRESS':
-      return { ...state, progress: action.payload }
+    case 'SET_OUTPUT_VIEW':
+      return { ...state, outputView: action.payload }
     case 'RESET':
       return {
         ...initialState,
         settings: state.settings,
         draft: state.settings.rememberedDraft || createDefaultDraft(),
+        outputView: { mode: 'empty', text: '', successfulChunks: 0, totalChunks: 0, runStatus: null },
       }
     default:
       return state
@@ -220,6 +297,13 @@ const initialState: AppState = {
     completedChunks: 0,
     etaSeconds: null,
   },
+  outputView: {
+    mode: 'empty',
+    text: '',
+    successfulChunks: 0,
+    totalChunks: 0,
+    runStatus: null,
+  },
 }
 
 interface AppContextType {
@@ -248,6 +332,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (run && COMPLETED_RUN_STATUSES.has(run.status)) {
       dispatch({ type: 'SET_TRANSLATION_OUTPUT', payload: getTranslationOutputFromRun(run) })
     }
+
+    // OutputView is automatically updated via SET_ACTIVE_RUN reducer
   }, [])
 
   useEffect(() => {
