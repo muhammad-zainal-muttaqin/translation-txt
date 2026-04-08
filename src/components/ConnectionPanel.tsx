@@ -4,8 +4,10 @@ import { Input } from './ui/input'
 import { Label } from './ui/label'
 import { Textarea } from './ui/textarea'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
-import { Settings, Save, Trash2, ExternalLink } from 'lucide-react'
+import { Settings, Save, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { saveProviderProfile, deleteProviderProfile, saveSettings, loadSettings } from '../lib/storage'
+import type { SavedProviderProfile } from '../types'
 
 const PROTOCOL_OPTIONS = [
   { value: 'openai-compatible', label: 'OpenAI-compatible' },
@@ -41,7 +43,7 @@ const PRESET_ENDPOINTS: Record<string, string> = {
 
 export function ConnectionPanel() {
   const { state, dispatch } = useApp()
-  const [showAdvanced, setShowAdvanced] = useState(false)
+  const [selectedProfileId, setSelectedProfileId] = useState('')
 
   useEffect(() => {
     if (!state.draft) {
@@ -58,6 +60,67 @@ export function ConnectionPanel() {
   }
 
   const presets = PRESET_OPTIONS[state.draft?.providerProtocol || 'openai-compatible'] || []
+
+  const handleSaveProfile = () => {
+    if (!state.draft || !state.draft.profileName.trim()) {
+      alert('Please enter a profile name')
+      return
+    }
+
+    const profile: SavedProviderProfile = {
+      id: 'profile_' + Date.now(),
+      name: state.draft.profileName,
+      protocol: state.draft.providerProtocol,
+      endpointUrl: state.draft.endpointUrl,
+      model: state.draft.model,
+      apiKey: state.draft.rememberOnDevice ? state.draft.apiKey : '',
+      extraHeadersJson: state.draft.extraHeadersJson,
+      anthropicVersion: state.draft.anthropicVersion,
+    }
+
+    const updatedSettings = saveProviderProfile(profile, state.settings)
+    dispatch({ type: 'SET_SETTINGS', payload: updatedSettings })
+    dispatch({ type: 'SET_DRAFT', payload: { ...state.draft, profileName: '' } })
+    alert('Profile saved: ' + profile.name)
+  }
+
+  const handleLoadProfile = (profileId: string) => {
+    if (!profileId) return
+    
+    setSelectedProfileId(profileId)
+    const profile = state.settings.savedProfiles.find(p => p.id === profileId)
+    if (!profile) return
+
+    const protocol = profile.protocol
+    const preset = PRESET_OPTIONS[protocol]?.[0]?.value || ''
+
+    updateDraft({
+      providerProtocol: protocol,
+      providerPreset: preset,
+      endpointUrl: profile.endpointUrl,
+      model: profile.model,
+      apiKey: profile.apiKey || state.draft?.apiKey || '',
+      extraHeadersJson: profile.extraHeadersJson,
+      anthropicVersion: profile.anthropicVersion,
+      profileName: profile.name,
+    })
+  }
+
+  const handleDeleteProfile = () => {
+    if (!selectedProfileId) {
+      alert('Please select a profile to delete')
+      return
+    }
+
+    if (!confirm('Are you sure you want to delete this profile?')) return
+
+    const updatedSettings = deleteProviderProfile(selectedProfileId, state.settings)
+    dispatch({ type: 'SET_SETTINGS', payload: updatedSettings })
+    setSelectedProfileId('')
+    alert('Profile deleted')
+  }
+
+  const savedProfiles = state.settings.savedProfiles || []
 
   return (
     <Card>
@@ -171,8 +234,15 @@ export function ConnectionPanel() {
               <select
                 id="saved-provider-profile"
                 className="w-full mt-1 p-2 border rounded-md bg-background"
+                value={selectedProfileId}
+                onChange={(e) => handleLoadProfile(e.target.value)}
               >
                 <option value="">Current form</option>
+                {savedProfiles.map((profile) => (
+                  <option key={profile.id} value={profile.id}>
+                    {profile.name}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -199,11 +269,11 @@ export function ConnectionPanel() {
             </label>
 
             <div className="flex gap-2 ml-auto">
-              <Button variant="secondary" size="sm">
+              <Button variant="secondary" size="sm" onClick={handleSaveProfile}>
                 <Save className="h-4 w-4 mr-1" />
                 Save
               </Button>
-              <Button variant="ghost" size="sm" disabled>
+              <Button variant="ghost" size="sm" onClick={handleDeleteProfile} disabled={!selectedProfileId}>
                 <Trash2 className="h-4 w-4 mr-1" />
                 Delete
               </Button>
