@@ -76,7 +76,10 @@ describe('Parallel Translation', () => {
       
       vi.mocked(chunker.splitFileContent).mockReturnValue({
         chunks,
-        diagnostics: [],
+        config: {
+          maxCharsPerChunk: 1000,
+          overlapLines: 0,
+        },
       });
 
       // Mock API calls - simulate delay untuk membuktikan parallel
@@ -141,7 +144,10 @@ describe('Parallel Translation', () => {
       
       vi.mocked(chunker.splitFileContent).mockReturnValue({
         chunks,
-        diagnostics: [],
+        config: {
+          maxCharsPerChunk: 1000,
+          overlapLines: 0,
+        },
       });
 
       let callCount = 0;
@@ -187,7 +193,10 @@ describe('Parallel Translation', () => {
       
       vi.mocked(chunker.splitFileContent).mockReturnValue({
         chunks,
-        diagnostics: [],
+        config: {
+          maxCharsPerChunk: 1000,
+          overlapLines: 0,
+        },
       });
 
       const progressUpdates: any[] = [];
@@ -243,7 +252,10 @@ describe('Parallel Translation', () => {
       
       vi.mocked(chunker.splitFileContent).mockReturnValue({
         chunks,
-        diagnostics: [],
+        config: {
+          maxCharsPerChunk: 1000,
+          overlapLines: 0,
+        },
       });
 
       let callCount = 0;
@@ -366,7 +378,10 @@ describe('Parallel Translation', () => {
       
       vi.mocked(chunker.splitFileContent).mockReturnValue({
         chunks,
-        diagnostics: [],
+        config: {
+          maxCharsPerChunk: 1000,
+          overlapLines: 0,
+        },
       });
 
       let shouldPause = false;
