@@ -7,7 +7,7 @@ import { Play, Pause, CheckCircle, XCircle, AlertCircle, Clock, Loader2, Zap } f
 const MULTIPLIER_OPTIONS = [1, 2, 3, 4, 5, 10, 20, 100] as const
 
 export function RunPanel() {
-  const { state } = useApp()
+  const { state, dispatch } = useApp()
   const activeRun = state.activeRun
   const progress = state.progress
 
@@ -128,8 +128,7 @@ export function RunPanel() {
                 onClick={() => {
                   if (!state.isTranslating && state.draft) {
                     const updatedDraft = { ...state.draft, parallelMultiplier: mult }
-                    // @ts-ignore - dispatch will be handled by parent
-                    state.dispatch?.({ type: 'SET_DRAFT', payload: updatedDraft })
+                    dispatch({ type: 'SET_DRAFT', payload: updatedDraft })
                   }
                 }}
                 disabled={state.isTranslating}
