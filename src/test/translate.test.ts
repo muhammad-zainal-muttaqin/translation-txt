@@ -138,6 +138,13 @@ describe('Parallel Translation', () => {
       // Verify parallel execution (harus ada multiple concurrent calls)
       expect(maxConcurrentCalls).toBeGreaterThan(1);
       expect(maxConcurrentCalls).toBeLessThanOrEqual(3);
+      expect(providers.callProvider).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.objectContaining({
+          timeoutMs: 30 * 60 * 1000,
+        })
+      );
     });
 
     it('should handle rate limit with fallback to sequential', async () => {

@@ -39,8 +39,8 @@ export interface TranslationConfig {
   abortSignal: AbortSignal;
 }
 
-// Chunk timeout: 10 minutes per chunk (karena 1 chunk bisa 8 menit)
-const CHUNK_TIMEOUT_MS = 10 * 60 * 1000;
+// Chunk timeout: long-running chunks can legitimately take a while on larger models.
+const CHUNK_TIMEOUT_MS = 30 * 60 * 1000;
 // Delay antar wave untuk menghindari rate limit
 const WAVE_DELAY_MS = 500;
 // Retry delay saat rate limit
@@ -173,7 +173,10 @@ async function runSingleChunk(
 
       // Race between API call and timeout
       const response = await Promise.race([
-        callProvider(providerConfig, prompt, { signal: abortSignal }),
+        callProvider(providerConfig, prompt, {
+          signal: abortSignal,
+          timeoutMs: CHUNK_TIMEOUT_MS,
+        }),
         new Promise<never>((_, reject) => {
           setTimeout(() => reject(new Error('Chunk timeout')), CHUNK_TIMEOUT_MS);
         }),

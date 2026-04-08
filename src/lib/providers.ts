@@ -15,7 +15,7 @@ export interface CallOptions {
   timeoutMs?: number;
 }
 
-const DEFAULT_TIMEOUT_MS = 900_000;
+const DEFAULT_TIMEOUT_MS = 30 * 60 * 1000;
 
 /**
  * Wraps fetch with a request timeout and forwards an external AbortSignal.
