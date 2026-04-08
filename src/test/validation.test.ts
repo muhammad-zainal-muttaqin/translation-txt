@@ -39,11 +39,11 @@ describe('validation', () => {
       )
     })
 
-    it('should reject file exceeding size limit', () => {
+    it('should reject file exceeding 500MB size limit', () => {
       const file: FileState = {
         name: 'test.txt',
         format: 'txt',
-        size: 100 * 1024 * 1024,
+        size: 600 * 1024 * 1024, // 600MB - exceeds 500MB limit
         lineCount: 1000,
         content: 'x'.repeat(1000),
       }
@@ -57,29 +57,31 @@ describe('validation', () => {
     })
 
     it('should reject file with too many lines', () => {
+      // Large line counts are now fully supported, only shows info message
       const file: FileState = {
         name: 'test.txt',
         format: 'txt',
         size: 1000,
-        lineCount: 200000,
-        content: 'line\n'.repeat(200000),
+        lineCount: 600000,
+        content: 'line\n'.repeat(600000),
       }
 
       const result = validateFile(file)
 
-      expect(result.valid).toBe(false)
+      // Should be valid now (no error, just info)
+      expect(result.valid).toBe(true)
       expect(result.issues).toContainEqual(
-        expect.objectContaining({ code: 'TOO_MANY_LINES' })
+        expect.objectContaining({ code: 'LARGE_LINE_COUNT', level: 'info' })
       )
     })
 
-    it('should warn about large files', () => {
+    it('should warn about very large files over 500MB', () => {
       const file: FileState = {
         name: 'test.txt',
         format: 'txt',
-        size: 15 * 1024 * 1024,
+        size: 550 * 1024 * 1024, // 550MB - triggers warning
         lineCount: 100000,
-        content: 'x'.repeat(15000000),
+        content: 'x'.repeat(1000),
       }
 
       const result = validateFile(file)

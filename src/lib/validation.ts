@@ -1,9 +1,9 @@
 import { ValidationIssue, FileState } from '../types';
 import { ALLOWED_FORMATS, STRUCTURED_FORMATS } from '../types';
 
-const MAX_FILE_SIZE = 50 * 1024 * 1024;
-const MAX_LINES = 100000;
-const MAX_CHARS = 10 * 1024 * 1024;
+const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB - practically unlimited for text files
+const MAX_CHARS = 500 * 1024 * 1024; // 500MB - practically unlimited
+// Note: MAX_LINES removed - no line count limit for novels/long texts
 const STRUCTURED_MAX_CHARS = 2 * 1024 * 1024;
 
 const FORMAT_SIZE_LIMITS: Record<string, number> = {
@@ -54,11 +54,13 @@ export function validateFile(file: FileState): ValidationResult {
     });
   }
 
-  if (file.lineCount > MAX_LINES) {
+  // No line count limit - supports novels and long texts of any length
+  // Only warn if file is extremely large (over 100k lines)
+  if (file.lineCount > 100000) {
     issues.push({
-      level: 'error',
-      code: 'TOO_MANY_LINES',
-      message: `File has ${file.lineCount.toLocaleString()} lines, exceeds maximum (${MAX_LINES.toLocaleString()}).`,
+      level: 'info',
+      code: 'LARGE_LINE_COUNT',
+      message: `File has ${file.lineCount.toLocaleString()} lines. Large files may take longer to process but are fully supported.`,
     });
   }
 
