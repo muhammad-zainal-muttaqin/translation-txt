@@ -1,237 +1,26 @@
-<!DOCTYPE html>
-<html lang="id">
+<!doctype html>
+<html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Translation TXT - Multi-Provider LLM Translator</title>
-    <meta name="description" content="Web application for translating text files using various LLM API providers. Supports OpenRouter, Cerebras, and Google Gemini.">
-    <meta name="keywords" content="translation, LLM, AI, text translator, openrouter, cerebras, gemini, file translator">
-    <meta name="author" content="Translation TXT">
-    <meta name="robots" content="index, follow">
-    
-    <!-- Open Graph / Facebook -->
-    <meta property="og:type" content="website">
-    <meta property="og:title" content="Translation TXT - Multi-Provider LLM Translator">
-    <meta property="og:description" content="Translate text files with various LLM API providers">
-    <meta property="og:image" content="https://via.placeholder.com/1200x630/6366f1/ffffff?text=Translation+TXT">
-    
-    <!-- Twitter -->
-    <meta property="twitter:card" content="summary_large_image">
-    <meta property="twitter:title" content="Translation TXT - Multi-Provider LLM Translator">
-    <meta property="twitter:description" content="Translate text files with various LLM API providers">
-    <meta property="twitter:image" content="https://via.placeholder.com/1200x630/6366f1/ffffff?text=Translation+TXT">
-    
-    <!-- Favicon -->
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌐</text></svg>">
-    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌐</text></svg>">
-    
-    <!-- PWA Manifest -->
-    <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#6366f1">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Translation TXT">
-    
-    <link rel="stylesheet" href="style.css">
-    
-    <!-- Preload critical resources -->
-    <link rel="preload" href="script.js" as="script">
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Client-side translation workspace for text and structured text files using Gemini, OpenAI-compatible, and Anthropic-compatible endpoints.">
+    <meta name="theme-color" content="#1e8f7a">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/src/index.css" />
+    <script>
+        (function() {
+            var t = localStorage.getItem("theme");
+            if (t === "light") document.documentElement.setAttribute("data-theme", "light");
+        })();
+    </script>
+    <title>TranslationTXT</title>
 </head>
 <body>
-    <header>
-        <h1>📜 Translation TXT</h1>
-    </header>
-    <main>
-        <section>
-            <h2>📂 Upload File</h2>
-            <div id="drag-drop-area" class="drag-drop-area">Drag & drop file here or click to select</div>
-            <input type="file" id="file-input" accept=".txt,.csv,.md,.json,.log,.srt,.vtt,.xml,.yaml,.yml">
-            <small class="helper">Supported formats: .txt, .csv, .md, .json, .log, .srt, .vtt, .xml, .yaml, .yml</small>
-            <div id="file-info" style="display:none;">
-                <p>File Name: <span id="file-name"></span></p>
-                <p>Size: <span id="file-size"></span></p>
-                <p>Line Count: <span id="line-count"></span></p>
-            </div>
-        </section>
-
-        <section>
-            <h2>⚙️ API Settings</h2>
-            <div class="api-settings">
-                <label for="api-provider">API Provider</label>
-                <select id="api-provider">
-                    <option value="openrouter">OpenRouter</option>
-                    <option value="cerebras">Cerebras</option>
-                    <option value="google">Google Gemini</option>
-                </select>
-
-                <label for="model-name-input">Model Name</label>
-                <input type="text" id="model-name-input" placeholder="Example: qwen/qwen3-4b:free, llama-4-scout-17b-16e-instruct, gemini-2.5-flash-lite">
-                <small class="helper">Enter model name according to selected provider.</small>
-
-                <label for="api-key-input">API Key</label>
-                <input type="password" id="api-key-input" placeholder="Enter your API key">
-                <small class="helper">Key is stored locally in your browser.</small>
-
-                <div class="inline-hint">
-                    <span class="hint">Tip: Make sure model name matches the selected provider.</span>
-                </div>
-            </div>
-        </section>
-
-        <section>
-            <h2>🌐 Language Settings</h2>
-            <div class="grid-2">
-                <div>
-                    <label for="source-language">Source Language</label>
-                    <select id="source-language">
-                        <option value="auto">Auto Detect</option>
-                        <option value="en">English</option>
-                        <option value="id">Indonesian</option>
-                        <option value="ja">Japanese</option>
-                        <option value="es">Spanish</option>
-                        <option value="custom">Custom...</option>
-                    </select>
-                    <input type="text" id="source-language-custom" placeholder="Enter custom source language (e.g., French, German, Chinese)" style="display:none;">
-                </div>
-                <div>
-                    <label for="target-language">Target Language</label>
-                    <select id="target-language">
-                        <option value="id">Indonesian</option>
-                        <option value="en">English</option>
-                        <option value="ja">Japanese</option>
-                        <option value="es">Spanish</option>
-                        <option value="custom">Custom...</option>
-                    </select>
-                    <input type="text" id="target-language-custom" placeholder="Enter custom target language (e.g., French, German, Chinese)" style="display:none;">
-                </div>
-            </div>
-            <small class="helper">Select from common languages or choose "Custom..." to enter your own language name.</small>
-        </section>
-
-        <section>
-            <h2>📝 Custom Instructions</h2>
-            <label for="custom-instruction-text">Translation style/context (optional)</label>
-            <textarea id="custom-instruction-text" placeholder="Example: Use casual and concise language."></textarea>
-            <div class="checkbox-row">
-                <input type="checkbox" id="use-default-instruction" checked>
-                <label for="use-default-instruction">Use recommended default instructions</label>
-            </div>
-        </section>
-
-        <section>
-            <h2>✂️ Splitting Options</h2>
-            <div class="split-card">
-                <div class="toggle-row">
-                    <input type="checkbox" id="auto-split-toggle" checked>
-                    <label for="auto-split-toggle">Automatic Splitting (recommended)</label>
-                </div>
-                <div class="grid-2" id="manual-split-grid">
-                    <div>
-                        <label for="max-lines-per-chunk">Max. lines per chunk</label>
-                        <input type="number" id="max-lines-per-chunk" value="300" min="1">
-                    </div>
-                    <div>
-                        <label for="overlap-lines">Overlap lines between chunks</label>
-                        <input type="number" id="overlap-lines" value="0" min="0">
-                    </div>
-                </div>
-                <div class="statistics">
-                    <p id="split-calculation">Waiting for file upload...</p>
-                </div>
-            </div>
-        </section>
-
-        <section>
-            <h2>🚀 Controls</h2>
-            <div class="btn-row">
-                <button id="start-translation" class="start">Start Translation</button>
-                <button id="pause-translation" class="pause" disabled>Pause</button>
-                <button id="resume-translation" class="resume" disabled>Resume</button>
-                <button id="cancel-translation" class="cancel" disabled>Cancel</button>
-                <button id="clear-all" class="clear-all">Clear All Progress</button>
-            </div>
-
-            <div class="progress-bar-container">
-                <div class="progress-bar" id="progress-bar"></div>
-                <div id="progress-text">0%</div>
-            </div>
-
-            <div id="log-panel">
-                <h3>📜 Log</h3>
-                <div id="log-content"></div>
-            </div>
-            <div id="error-message" class="error-message" style="display:none"></div>
-        </section>
-
-        <section>
-            <h2>🧩 Results</h2>
-            <div class="split-view">
-                <div class="original-view">
-                    <h3>Original Text</h3>
-                    <pre id="original-text-preview"></pre>
-                </div>
-                <div class="translated-view">
-                    <h3>Translation Result</h3>
-                    <pre id="translated-text-preview"></pre>
-                </div>
-            </div>
-
-            <div class="download-options">
-                <button class="download-txt" id="download-single-txt">Download .txt</button>
-                <button class="download-zip" id="download-zip">Download .zip</button>
-                <button class="copy-clipboard" id="copy-to-clipboard">Copy to Clipboard</button>
-            </div>
-        </section>
-
-        <footer>
-            <div class="footer-content">
-                <span>Made with ❤️ for text translation productivity.</span>
-                <a href="https://github.com/muhammad-zainal-muttaqin/translation-txt" target="_blank" rel="noopener noreferrer" class="github-link" title="View on GitHub">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
-                    </svg>
-                </a>
-            </div>
-        </footer>
-    </main>
-
-    <!-- Loading indicator -->
-    <div id="loading-overlay" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,0.9);display:flex;align-items:center;justify-content:center;z-index:9999;">
-        <div style="text-align:center;color:white;">
-            <div style="font-size:2rem;margin-bottom:1rem;">🌐</div>
-            <div>Loading Translation TXT...</div>
-        </div>
-    </div>
-
-    <script src="script.js"></script>
-    
-    <!-- Service Worker Registration -->
-    <script>
-        if ('serviceWorker' in navigator && window.location.protocol === 'https:') {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js')
-                    .then((registration) => {
-                        console.log('SW registered: ', registration);
-                    })
-                    .catch((registrationError) => {
-                        console.log('SW registration failed: ', registrationError);
-                    });
-            });
-        } else {
-            console.log('Service Worker not supported or not HTTPS');
-        }
-        
-        // Hide loading overlay when page is ready
-        window.addEventListener('load', () => {
-            setTimeout(() => {
-                const overlay = document.getElementById('loading-overlay');
-                if (overlay) {
-                    overlay.style.opacity = '0';
-                    overlay.style.transition = 'opacity 0.5s ease';
-                    setTimeout(() => overlay.remove(), 500);
-                }
-            }, 1000);
-        });
-    </script>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
 </body>
 </html>
