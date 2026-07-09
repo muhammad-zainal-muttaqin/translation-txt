@@ -80,7 +80,7 @@ export async function callOpenAICompatible(
       max_tokens: maxOutputTokens ?? 8192,
       stream: true,
       messages: [
-        { role: 'system', content: 'You are a helpful translation assistant.' },
+        { role: 'system', content: 'You are a professional translation engine. You output only the translated text, never planning, reasoning, notes, apologies, or commentary about the task.' },
         { role: 'user', content: prompt },
       ],
     }),
@@ -160,6 +160,7 @@ export async function callAnthropic(
     body: JSON.stringify({
       model,
       max_tokens: maxOutputTokens ?? 8192,
+      system: 'You are a professional translation engine. You output only the translated text, never planning, reasoning, notes, apologies, or commentary about the task.',
       messages: [
         { role: 'user', content: prompt },
       ],

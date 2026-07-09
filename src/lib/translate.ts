@@ -9,6 +9,7 @@ import type {
 import { callProvider } from './providers';
 import { splitFileContent, mergeChunks } from './chunker';
 import { buildTranslationPrompt } from './prompts';
+import { sanitizeTranslationOutput, detectMetaCommentary } from './sanitize';
 import { validateFile, validateProviderConfig } from './validation';
 import { saveActiveRun, generateRunId, addSessionLog } from './storage';
 
@@ -149,6 +150,7 @@ async function runSingleChunk(
   const chunkRecord = run.chunks[chunkIndex];
   const maxRetries = draft.refusalRecoveryEnabled ? 2 : 0;
   let attempt = 0;
+  let reinforceOutputContract = false;
 
   while (attempt <= maxRetries) {
     if (abortSignal.aborted) {
@@ -160,7 +162,7 @@ async function runSingleChunk(
       chunkRecord.startTime = Date.now();
       chunkRecord.error = null;
       notifyRunUpdate(run, callbacks);
-      
+
       callbacks.onChunkStart(chunkIndex);
       addSessionLog(`Chunk ${chunkIndex + 1}: API call started (attempt ${attempt + 1})`, 'info');
 
@@ -169,7 +171,7 @@ async function runSingleChunk(
         targetLanguage: chunkConfig.targetLanguage,
         customInstruction: chunkConfig.instruction,
         useDefaultInstruction: draft.useDefaultInstruction,
-      });
+      }, { reinforceOutputContract });
 
       // Race between API call and timeout
       const response = await Promise.race([
@@ -189,7 +191,7 @@ async function runSingleChunk(
         return { success: false, error: 'Aborted' };
       }
 
-      const translatedText = response.content.trim();
+      const translatedText = sanitizeTranslationOutput(response.content, file.format);
 
       if (response.finishReason === 'length') {
         chunkRecord.status = 'truncated';
@@ -201,17 +203,46 @@ async function runSingleChunk(
         addSessionLog(`Chunk ${chunkIndex + 1}: truncated`, 'warning');
         callbacks.onChunkError(chunkIndex, chunkRecord.error);
         return { success: true, translatedText };
-      } else {
-        chunkRecord.status = 'success';
-        chunkRecord.translatedCore = translatedText;
-        chunkRecord.endTime = Date.now();
-        chunkRecord.retryCount = attempt;
-        chunkRecord.error = null;
-        notifyRunUpdate(run, callbacks);
-        addSessionLog(`Chunk ${chunkIndex + 1}: completed in ${((chunkRecord.endTime - chunkRecord.startTime) / 1000).toFixed(1)}s`, 'info');
-        callbacks.onChunkComplete(chunkIndex, translatedText);
-        return { success: true, translatedText };
       }
+
+      // Detect the model narrating the task instead of translating it.
+      const meta = detectMetaCommentary(translatedText);
+      if (meta.flagged && attempt < maxRetries) {
+        reinforceOutputContract = true;
+        attempt++;
+        chunkRecord.retryCount = attempt;
+        chunkRecord.diagnostics.push({
+          timestamp: Date.now(),
+          type: 'warning',
+          code: 'META_COMMENTARY',
+          message: `Response looked like task commentary (${meta.markers.join(', ')}); retrying with a stricter prompt (${attempt}/${maxRetries}).`,
+        });
+        notifyRunUpdate(run, callbacks);
+        addSessionLog(`Chunk ${chunkIndex + 1}: output looked like commentary, retrying (${attempt}/${maxRetries})`, 'warning');
+        continue;
+      }
+
+      chunkRecord.status = 'success';
+      chunkRecord.translatedCore = translatedText;
+      chunkRecord.endTime = Date.now();
+      chunkRecord.retryCount = attempt;
+      chunkRecord.error = null;
+
+      // Kept the best-effort text, but the leak survived retries: flag for review.
+      if (meta.flagged) {
+        chunkRecord.validationIssues.push({
+          level: 'warning',
+          code: 'META_COMMENTARY',
+          message: `Part ${chunkIndex + 1} may contain the model's own notes instead of a clean translation (${meta.markers.join(', ')}). Please review this part.`,
+          chunkIndex,
+        });
+        addSessionLog(`Chunk ${chunkIndex + 1}: possible commentary left after retries — flagged for review`, 'warning');
+      }
+
+      notifyRunUpdate(run, callbacks);
+      addSessionLog(`Chunk ${chunkIndex + 1}: completed in ${((chunkRecord.endTime - chunkRecord.startTime) / 1000).toFixed(1)}s`, 'info');
+      callbacks.onChunkComplete(chunkIndex, translatedText);
+      return { success: true, translatedText };
 
     } catch (error) {
       // Handle abort
@@ -528,6 +559,14 @@ async function runChunks(
     chunkConfig.overlapLines,
     file.format
   );
+
+  // Surface any per-chunk review flags (e.g. leaked commentary) to the user.
+  // persistRun -> onRunUpdate -> syncRunState dispatches these to the UI.
+  const chunkIssues = run.chunks.flatMap((c) => c.validationIssues);
+  if (chunkIssues.length > 0) {
+    const existing = run.finalValidationIssues ?? [];
+    run.finalValidationIssues = [...existing, ...chunkIssues];
+  }
 
   run.status = 'completed';
   run.completedAt = Date.now();

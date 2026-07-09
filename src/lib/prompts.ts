@@ -125,10 +125,22 @@ const FORMAT_RULES: Record<string, string> = {
 - Preserve multi-line string formats`,
 };
 
+const OUTPUT_CONTRACT = `OUTPUT CONTRACT - THIS OVERRIDES EVERYTHING ELSE:
+- Your entire response must be the translation and ONLY the translation.
+- Do NOT write any planning, reasoning, or "thinking out loud".
+- Do NOT describe what you are doing or about to do. Never write phrases like "let me...", "I will...", "saya akan...", "mari kita...", "here is the translation".
+- Do NOT mention tokens, length/output limits, compliance, "the original text", "the input", or "final output".
+- Do NOT apologize, add translator's notes, disclaimers, headers, or summaries.
+- If a passage is long, difficult, or sensitive, translate it faithfully in full anyway. NEVER replace any passage with a remark about it or a note that you are shortening or continuing it.
+- Output nothing before the first translated line and nothing after the last one.`;
+
+const RETRY_REINFORCEMENT = `RETRY NOTICE: Your previous attempt leaked commentary about the task instead of a clean translation. This time output ONLY the translated text - no planning, no notes, no meta-commentary of any kind.`;
+
 export function buildTranslationPrompt(
   content: string,
   format: string,
-  config: PromptConfig
+  config: PromptConfig,
+  options: { reinforceOutputContract?: boolean } = {}
 ): string {
   const { sourceLanguage, targetLanguage, customInstruction, useDefaultInstruction } = config;
   const sourceLabel = getLanguageLabel(sourceLanguage);
@@ -139,6 +151,7 @@ export function buildTranslationPrompt(
     : customInstruction || DEFAULT_INSTRUCTION;
 
   const formatRule = FORMAT_RULES[format] || FORMAT_RULES.txt;
+  const retryNotice = options.reinforceOutputContract ? `${RETRY_REINFORCEMENT}\n\n` : '';
 
   const validationCheckpoint = `
 VALIDATION CHECKPOINT:
@@ -157,7 +170,9 @@ ${content}
 
 OUTPUT: Return the exact same structure with ALL text converted from ${sourceLabel} to ${targetLabel}.`;
 
-  return `CRITICAL TRANSLATION RULES - FOLLOW EXACTLY:
+  return `${retryNotice}${OUTPUT_CONTRACT}
+
+CRITICAL TRANSLATION RULES - FOLLOW EXACTLY:
 
 1. PRESERVE STRUCTURE: Maintain EXACT same number of lines, paragraphs, sections, and formatting
 2. PRESERVE SYNTAX: Keep all markup, tags, delimiters, brackets, quotes, and special characters UNCHANGED  
