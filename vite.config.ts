@@ -1,6 +1,7 @@
 /// <reference types="vitest" />
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 import path from 'path'
 
@@ -32,6 +33,7 @@ export default defineConfig({
   plugins: [
     logApiRequests(),
     react(),
+    tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'robots.txt'],
@@ -39,7 +41,7 @@ export default defineConfig({
         name: 'TranslationTXT',
         short_name: 'TranslationTXT',
         description: 'Client-side translation workspace for text and structured text files',
-        theme_color: '#1e8f7a',
+        theme_color: '#9d4128',
         background_color: '#ffffff',
         display: 'standalone',
         icons: [

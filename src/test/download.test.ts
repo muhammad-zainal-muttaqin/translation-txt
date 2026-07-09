@@ -3,7 +3,6 @@ import {
   generateTranslatedFilename,
   getLanguageSuffix,
   downloadSingleFile,
-  copyToClipboard,
 } from '../lib/download'
 
 describe('download', () => {

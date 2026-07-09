@@ -9,7 +9,6 @@ import type {
   LogEntry,
   ValidationIssue,
   OutputView,
-  RunStatus,
 } from '../types'
 import { DEFAULT_INSTRUCTION } from '../types'
 import { startTranslation, pauseTranslation, cancelTranslation, discardActiveRun as discardRun, resumeTranslation } from '../lib/translate'
@@ -170,10 +169,6 @@ function getTranslationOutputFromRun(run: ActiveRun | null): string {
   )
 }
 
-function runStatusFromRun(run: ActiveRun | null): RunStatus | null {
-  return run?.status ?? null
-}
-
 function loadInitialState(): AppState {
   const settings = loadSettings()
   // Migration: bump previously-saved drafts that still carry an old low cap
@@ -246,6 +241,8 @@ function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, finalValidationIssues: action.payload }
     case 'SET_IS_TRANSLATING':
       return { ...state, isTranslating: action.payload }
+    case 'SET_PROGRESS':
+      return { ...state, progress: action.payload }
     case 'SET_ACTIVE_RUN': {
       const outputView = getOutputViewFromRun(action.payload)
       return { ...state, activeRun: action.payload, outputView }

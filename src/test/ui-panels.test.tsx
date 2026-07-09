@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { useEffect } from 'react'
 import { AppProvider, useApp } from '../contexts/AppContext'
-import { OutputPanel } from '../components/OutputPanel'
+import { ResultSection } from '../components/ResultSection'
 import { PreviewModal } from '../components/PreviewModal'
-import { RunPanel } from '../components/RunPanel'
+import { ProgressSection } from '../components/ProgressSection'
 import type { ActiveRun, DraftSettings, Settings } from '../types'
 import { STORAGE_KEYS } from '../types'
 
@@ -120,7 +120,7 @@ function ProgressHarness() {
     dispatch({ type: 'SET_IS_TRANSLATING', payload: true })
   }, [dispatch])
 
-  return <RunPanel />
+  return <ProgressSection />
 }
 
 function LargePreviewHarness({
@@ -166,7 +166,7 @@ function LargePreviewHarness({
 
   return modal
     ? <PreviewModal open={true} onOpenChange={() => {}} />
-    : <OutputPanel onExpandPreview={() => {}} />
+    : <ResultSection onExpandPreview={() => {}} />
 }
 
 describe('Large-file previews and run monitor', () => {
@@ -236,6 +236,81 @@ describe('Large-file previews and run monitor', () => {
     expect(pageText).toContain('Translated modal 100000')
   })
 
+  it('shows partial translated text in the preview modal for an unfinished run', async () => {
+    localStorage.setItem(
+      STORAGE_KEYS.settings,
+      JSON.stringify(createSettings())
+    )
+
+    function PartialRunHarness() {
+      const { dispatch } = useApp()
+
+      useEffect(() => {
+        const run = createRun({
+          status: 'paused',
+          totalChunks: 3,
+          processedChunks: 1,
+          completedAt: null,
+          chunks: [
+            {
+              index: 0,
+              original: 'original part one',
+              translatedCore: 'translated part one',
+              status: 'success',
+              startTime: null,
+              endTime: null,
+              retryCount: 0,
+              error: null,
+              diagnostics: [],
+              validationIssues: [],
+            },
+            {
+              index: 1,
+              original: 'original part two',
+              translatedCore: '',
+              status: 'pending',
+              startTime: null,
+              endTime: null,
+              retryCount: 0,
+              error: null,
+              diagnostics: [],
+              validationIssues: [],
+            },
+            {
+              index: 2,
+              original: 'original part three',
+              translatedCore: '',
+              status: 'pending',
+              startTime: null,
+              endTime: null,
+              retryCount: 0,
+              error: null,
+              diagnostics: [],
+              validationIssues: [],
+            },
+          ],
+        })
+
+        dispatch({ type: 'SET_FILE', payload: run.file })
+        dispatch({ type: 'SET_ACTIVE_RUN', payload: run })
+      }, [dispatch])
+
+      return <PreviewModal open={true} onOpenChange={() => {}} />
+    }
+
+    render(
+      <AppProvider>
+        <PartialRunHarness />
+      </AppProvider>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText(/translated part one/)).toBeInTheDocument()
+    })
+    expect(screen.getByText(/partial result: 1 of 3 parts/)).toBeInTheDocument()
+    expect(screen.queryByText('No translation yet.')).not.toBeInTheDocument()
+  })
+
   it('shows effective parallelism and wave math from the multiplied run config', async () => {
     localStorage.setItem(
       STORAGE_KEYS.settings,
@@ -265,8 +340,8 @@ describe('Large-file previews and run monitor', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getAllByText(/15 chunks/).length).toBeGreaterThanOrEqual(2)
+      expect(screen.getAllByText(/15 parts/).length).toBeGreaterThanOrEqual(2)
     })
-    expect(screen.getByText(/Wave 1\/2: Processing 15 chunks/)).toBeInTheDocument()
+    expect(screen.getByText(/Wave 1\/2 — translating 15 parts/)).toBeInTheDocument()
   })
 })

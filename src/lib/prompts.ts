@@ -1,5 +1,3 @@
-import { LINE_ORIENTED_FORMATS, STRUCTURED_FORMATS } from '../types';
-
 export interface PromptConfig {
   sourceLanguage: string;
   targetLanguage: string;
@@ -184,10 +182,8 @@ ${validationCheckpoint}`;
 
 export function buildNovelContextPrompt(
   content: string,
-  targetLanguage: string
+  _targetLanguage: string
 ): string {
-  const targetLabel = getLanguageLabel(targetLanguage);
-
   return `You are analyzing a fictional narrative text to extract translation context.
 
 TASK:

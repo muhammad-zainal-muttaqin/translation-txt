@@ -55,13 +55,6 @@ export function saveActiveRun(run: ActiveRun | null): void {
   }
 }
 
-export function getDraftFromSettings(settings: Settings, protocol: string, preset: string): DraftSettings | null {
-  if (settings.rememberedDraft) {
-    return settings.rememberedDraft;
-  }
-  return null;
-}
-
 export function saveProviderProfile(profile: SavedProviderProfile, settings: Settings): Settings {
   const existing = settings.savedProfiles.findIndex(p => p.id === profile.id);
   const savedProfiles = existing >= 0

@@ -159,6 +159,7 @@ export function splitJSON(
       return [text];
     }
   } catch {
+    // Invalid JSON is passed through as a single chunk.
   }
 
   return [text];
@@ -213,10 +214,9 @@ export function splitFileContent(
   format: string,
   config: SplitConfig
 ): ChunkResult {
-  const { maxCharsPerChunk, overlapLines, autoSplit } = config;
   const { maxChars, overlap } = getEffectiveSplitConfig(text.length, text.split('\n').length, config);
 
-  let chunks: string[] = [];
+  let chunks: string[];
 
   if (LINE_ORIENTED_FORMATS.has(format)) {
     if (format === 'srt' || format === 'vtt') {

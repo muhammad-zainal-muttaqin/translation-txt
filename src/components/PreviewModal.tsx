@@ -16,14 +16,20 @@ interface PreviewModalProps {
 
 export function PreviewModal({ open, onOpenChange }: PreviewModalProps) {
   const { state } = useApp()
+  const { outputView } = state
+  const isPartial = outputView.mode === 'partial'
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl w-[90vw] h-[80vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>Full Preview</DialogTitle>
+          <DialogTitle className="font-serif text-2xl font-normal">
+            Compare original and translation
+          </DialogTitle>
           <DialogDescription>
-            View the original and translated text side by side.
+            {isPartial
+              ? `Showing a partial result: ${outputView.successfulChunks} of ${outputView.totalChunks} parts finished so far.`
+              : 'The original and translated text, side by side.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -39,7 +45,7 @@ export function PreviewModal({ open, onOpenChange }: PreviewModalProps) {
           <div className="flex flex-col overflow-hidden">
             <h3 className="text-sm font-medium mb-2">Translated</h3>
             <LargeTextPreview
-              text={state.translationOutput}
+              text={outputView.text}
               emptyMessage="No translation yet."
               className="flex-1 p-3 bg-muted rounded-md text-xs overflow-auto whitespace-pre-wrap"
             />

@@ -3,7 +3,7 @@ import {
   validateFile,
   validateProviderConfig,
 } from '../lib/validation'
-import type { FileState, ValidationIssue } from '../types'
+import type { FileState } from '../types'
 
 describe('validation', () => {
   describe('validateFile', () => {

@@ -47,7 +47,7 @@ async function fetchWithTimeout(
     if (err instanceof DOMException && err.name === 'AbortError') {
       // Distinguish timeout from user-initiated cancellation
       if (controller.signal.reason instanceof DOMException && controller.signal.reason.name === 'TimeoutError') {
-        throw new Error(`Request timed out after ${timeoutMs / 1000}s. The provider did not respond within the deadline — try a smaller "Max chars per chunk", a lower "Max output tokens", or a faster model.`);
+        throw new Error(`Request timed out after ${timeoutMs / 1000}s. The provider did not respond within the deadline — try a smaller "Max chars per chunk", a lower "Max output tokens", or a faster model.`, { cause: err });
       }
       throw err;
     }

@@ -21,6 +21,7 @@ coverage/
 .nyc_output
 
 # Build tools
+*.tsbuildinfo
 .grunt
 bower_components
 node_modules/

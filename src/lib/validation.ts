@@ -76,7 +76,7 @@ export function validateFile(file: FileState): ValidationResult {
   if (file.format === 'json') {
     try {
       JSON.parse(file.content);
-    } catch (e) {
+    } catch {
       issues.push({
         level: 'error',
         code: 'INVALID_JSON',

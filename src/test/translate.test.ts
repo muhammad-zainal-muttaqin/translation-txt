@@ -207,8 +207,8 @@ describe('Parallel Translation', () => {
         },
       });
 
-      const progressUpdates: any[] = [];
-      const waveUpdates: any[] = [];
+      const progressUpdates: Array<{ completedChunks: number; percent: number }> = [];
+      const waveUpdates: Array<{ waveIndex: number; chunkIndices: number[] }> = [];
       
       vi.mocked(providers.callProvider).mockImplementation(async () => {
         return {
@@ -443,8 +443,6 @@ describe('Parallel Translation', () => {
         },
       });
 
-      let shouldPause = false;
-      
       vi.mocked(providers.callProvider).mockImplementation(async (_config, _prompt, options) => {
         // Check abort signal
         if (options?.signal?.aborted) {
