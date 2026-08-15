@@ -8,6 +8,7 @@ import {
   deleteProviderProfile,
   generateRunId,
   clearSessionLogs,
+  normalizeRunOnLoad,
 } from '../lib/storage'
 import type { Settings, ActiveRun, SavedProviderProfile } from '../types'
 
@@ -264,5 +265,53 @@ describe('storage', () => {
       clearSessionLogs()
       expect(mockLocalStorage['translationtxt.session.v1']).toBeUndefined()
     })
+  })
+
+  it('migrates a completed run containing truncated parts to failed-validation', () => {
+    const run = {
+      id: 'legacy-run',
+      status: 'completed' as const,
+      file: { name: 'legacy.txt', format: 'txt', size: 1, lineCount: 1, content: 'x' },
+      config: {
+        sourceLanguage: 'en',
+        targetLanguage: 'id',
+        instruction: '',
+        novelModeEnabled: false,
+        refusalRecoveryEnabled: true,
+        maxCharsPerChunk: 9000,
+        overlapLines: 0,
+        maxParallelChunks: 1,
+        parallelMultiplier: 1,
+        autoSplit: true,
+      },
+      chunks: [{
+        index: 0,
+        original: 'x',
+        translatedCore: 'partial',
+        status: 'truncated' as const,
+        startTime: null,
+        endTime: null,
+        retryCount: 0,
+        error: null,
+        diagnostics: [],
+        validationIssues: [],
+      }],
+      createdAt: 1,
+      startedAt: 1,
+      completedAt: 2,
+      totalChunks: 1,
+      processedChunks: 1,
+      finalValidationIssues: [],
+      novelContext: null,
+      progress: { percent: 100, elapsedSeconds: 1, averageChunkTime: 1, etaSeconds: 0 },
+    }
+
+    const migrated = normalizeRunOnLoad(run)
+
+    expect(migrated.status).toBe('failed')
+    expect(migrated.chunks[0].status).toBe('failed-validation')
+    expect(migrated.processedChunks).toBe(0)
+    expect(migrated.progress.percent).toBe(0)
+    expect(migrated.finalValidationIssues).toContainEqual(expect.objectContaining({ code: 'LEGACY_INCOMPLETE_RUN' }))
   })
 })

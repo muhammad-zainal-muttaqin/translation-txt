@@ -383,14 +383,9 @@ export function SettingsSheet({ open, onOpenChange }: SettingsSheetProps) {
               </p>
             </div>
 
-            <label className="flex items-center gap-2 cursor-pointer">
-              <Checkbox
-                id="refusal-recovery-toggle"
-                checked={state.draft?.refusalRecoveryEnabled ?? true}
-                onCheckedChange={(checked) => updateDraft({ refusalRecoveryEnabled: !!checked })}
-              />
-              <span className="text-sm">Retry automatically when the model refuses a part</span>
-            </label>
+            <p className="text-sm text-muted-foreground">
+              Recovery is always enabled: each part gets up to five retries, then a safe format-aware rescue split when possible.
+            </p>
           </section>
 
           <hr />

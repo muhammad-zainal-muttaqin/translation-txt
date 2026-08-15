@@ -15,6 +15,36 @@ export interface CallOptions {
   timeoutMs?: number;
 }
 
+export class ProviderRequestError extends Error {
+  readonly status: number;
+  readonly retryAfterMs: number | null;
+
+  constructor(message: string, status: number, retryAfterMs: number | null = null) {
+    super(message);
+    this.name = 'ProviderRequestError';
+    this.status = status;
+    this.retryAfterMs = retryAfterMs;
+  }
+}
+
+function parseRetryAfter(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds)) return Math.max(0, Math.round(seconds * 1000));
+
+  const timestamp = Date.parse(value);
+  return Number.isNaN(timestamp) ? null : Math.max(0, timestamp - Date.now());
+}
+
+function responseError(label: string, response: Response): ProviderRequestError {
+  const retryAfterMs = parseRetryAfter(response.headers?.get('retry-after'));
+  return new ProviderRequestError(
+    `${label} API error ${response.status}: `,
+    response.status,
+    retryAfterMs
+  );
+}
+
 const DEFAULT_TIMEOUT_MS = 30 * 60 * 1000;
 
 /**
@@ -88,7 +118,8 @@ export async function callOpenAICompatible(
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`OpenAI-compatible API error ${response.status}: ${errorText}`);
+    const error = responseError('OpenAI-compatible', response);
+    throw new ProviderRequestError(`${error.message}${errorText}`, error.status, error.retryAfterMs);
   }
 
   if (!response.body) {
@@ -169,7 +200,8 @@ export async function callAnthropic(
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`Anthropic API error ${response.status}: ${errorText}`);
+    const error = responseError('Anthropic', response);
+    throw new ProviderRequestError(`${error.message}${errorText}`, error.status, error.retryAfterMs);
   }
 
   const data = await response.json();
@@ -211,7 +243,8 @@ export async function callGemini(
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`Gemini API error ${response.status}: ${errorText}`);
+    const error = responseError('Gemini', response);
+    throw new ProviderRequestError(`${error.message}${errorText}`, error.status, error.retryAfterMs);
   }
 
   const data = await response.json();

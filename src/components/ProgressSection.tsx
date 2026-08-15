@@ -188,7 +188,7 @@ export function ProgressSection() {
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-sm font-medium">Parts</h3>
                 <span className="text-xs text-muted-foreground">
-                  {activeRun.chunks.filter((chunk) => chunk.status === 'success' || chunk.status === 'truncated').length}{' '}
+                  {activeRun.chunks.filter((chunk) => chunk.status === 'success').length}{' '}
                   / {activeRun.chunks.length} done
                 </span>
               </div>

@@ -95,6 +95,11 @@ export function ActivitySection() {
                       {chunk.retryCount > 0 && (
                         <p className="text-xs text-muted-foreground mt-1">Retries: {chunk.retryCount}</p>
                       )}
+                      {(chunk.rescueCount || 0) > 0 && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Rescue subparts: {chunk.rescueCount} (sequential)
+                        </p>
+                      )}
                     </div>
                   ))}
                 </div>

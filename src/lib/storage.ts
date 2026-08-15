@@ -88,12 +88,73 @@ export function clearRememberedDraft(settings: Settings): Settings {
 
 export function normalizeRunOnLoad(run: ActiveRun): ActiveRun {
   const inFlightStates = ['running', 'paused', 'aborted'];
-  
-  if (inFlightStates.includes(run.status)) {
-    run.status = 'paused';
+  const normalized: ActiveRun = {
+    ...run,
+    chunks: (run.chunks || []).map(chunk => ({
+      ...chunk,
+      diagnostics: chunk.diagnostics || [],
+      validationIssues: chunk.validationIssues || [],
+    })),
+    finalValidationIssues: run.finalValidationIssues || [],
+  };
+
+  if (inFlightStates.includes(normalized.status)) {
+    normalized.status = 'paused';
   }
-  
-  return run;
+
+  const hasIncompletePart = normalized.chunks.some(chunk => chunk.status !== 'success');
+  if (normalized.status === 'completed' && hasIncompletePart) {
+    normalized.chunks = normalized.chunks.map(chunk => {
+      if (chunk.status !== 'truncated') return chunk;
+      const migrationIssue = {
+        level: 'error' as const,
+        code: 'LEGACY_TRUNCATED_PART',
+        message: `Part ${chunk.index + 1} was previously marked completed despite truncated output.`,
+        chunkIndex: chunk.index,
+      };
+      return {
+        ...chunk,
+        status: 'failed-validation' as const,
+        error: migrationIssue.message,
+        validationIssues: [...chunk.validationIssues, migrationIssue],
+      };
+    });
+    normalized.status = 'failed';
+    normalized.completedAt = null;
+    normalized.finalValidationIssues = [
+      ...normalized.finalValidationIssues,
+      {
+        level: 'error',
+        code: 'LEGACY_INCOMPLETE_RUN',
+        message: 'This saved run was migrated because truncated parts cannot produce a completed file.',
+      },
+    ];
+  }
+
+  if (normalized.status === 'completed-review-required') {
+    normalized.status = 'failed';
+    normalized.completedAt = null;
+    normalized.finalValidationIssues = [
+      ...normalized.finalValidationIssues,
+      {
+        level: 'error',
+        code: 'LEGACY_REVIEW_REQUIRED_RUN',
+        message: 'This saved run requires validation before a file can be used.',
+      },
+    ];
+  }
+
+  normalized.totalChunks = normalized.chunks.length || normalized.totalChunks;
+  normalized.processedChunks = normalized.chunks.filter(chunk => chunk.status === 'success').length;
+  normalized.progress = {
+    ...(normalized.progress || {
+      elapsedSeconds: 0,
+      averageChunkTime: null,
+      etaSeconds: null,
+    }),
+    percent: Math.round((normalized.processedChunks / Math.max(normalized.totalChunks, 1)) * 100),
+  };
+  return normalized;
 }
 
 export function generateRunId(): string {

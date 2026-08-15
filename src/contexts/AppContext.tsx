@@ -84,12 +84,19 @@ type AppAction =
   | { type: 'SET_OUTPUT_VIEW'; payload: OutputView }
   | { type: 'RESET' }
 
-const COMPLETED_RUN_STATUSES = new Set(['completed', 'completed-review-required'])
+const COMPLETED_RUN_STATUSES = new Set(['completed'])
 const PARTIAL_ELIGIBLE_STATUSES = new Set(['running', 'paused', 'failed', 'cancelled', 'aborted'])
+
+function isStrictlyCompleted(run: ActiveRun): boolean {
+  return run.status === 'completed' &&
+    run.totalChunks > 0 &&
+    run.chunks.length === run.totalChunks &&
+    run.chunks.every(chunk => chunk.status === 'success')
+}
 
 function buildPartialOutput(run: ActiveRun): string {
   const successfulChunks = run.chunks.filter(
-    (chunk) => chunk.status === 'success' || chunk.status === 'truncated'
+    (chunk) => chunk.status === 'success'
   )
 
   if (successfulChunks.length === 0) {
@@ -110,11 +117,11 @@ function getOutputViewFromRun(run: ActiveRun | null): OutputView {
   }
 
   const successfulChunks = run.chunks.filter(
-    (chunk) => chunk.status === 'success' || chunk.status === 'truncated'
+    (chunk) => chunk.status === 'success'
   ).length
 
   // Complete output for completed runs
-  if (COMPLETED_RUN_STATUSES.has(run.status)) {
+  if (COMPLETED_RUN_STATUSES.has(run.status) && isStrictlyCompleted(run)) {
     const text = mergeChunks(
       run.chunks.map((chunk) => chunk.translatedCore),
       run.config.overlapLines,
@@ -158,7 +165,7 @@ function getSanitizedRememberedDraft(draft: DraftSettings): DraftSettings {
 }
 
 function getTranslationOutputFromRun(run: ActiveRun | null): string {
-  if (!run || !COMPLETED_RUN_STATUSES.has(run.status)) {
+  if (!run || !isStrictlyCompleted(run)) {
     return ''
   }
 
@@ -245,7 +252,14 @@ function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, progress: action.payload }
     case 'SET_ACTIVE_RUN': {
       const outputView = getOutputViewFromRun(action.payload)
-      return { ...state, activeRun: action.payload, outputView }
+      return {
+        ...state,
+        activeRun: action.payload,
+        outputView,
+        translationOutput: action.payload && isStrictlyCompleted(action.payload)
+          ? getTranslationOutputFromRun(action.payload)
+          : '',
+      }
     }
     case 'SET_ACTIVE_PANEL':
       return { ...state, activePanel: action.payload }
@@ -326,8 +340,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'SET_ACTIVE_RUN', payload: run })
     dispatch({ type: 'SET_FINAL_VALIDATION_ISSUES', payload: run?.finalValidationIssues || [] })
 
-    if (run && COMPLETED_RUN_STATUSES.has(run.status)) {
+    if (run && isStrictlyCompleted(run)) {
       dispatch({ type: 'SET_TRANSLATION_OUTPUT', payload: getTranslationOutputFromRun(run) })
+    } else {
+      dispatch({ type: 'SET_TRANSLATION_OUTPUT', payload: '' })
     }
 
     // OutputView is automatically updated via SET_ACTIVE_RUN reducer

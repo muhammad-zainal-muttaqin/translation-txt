@@ -104,6 +104,10 @@ export function splitByCSVRows(
     chunks.push(header + currentChunk);
   }
 
+  if (chunks.length === 0 && header) {
+    chunks.push(header.trimEnd());
+  }
+
   return chunks;
 }
 
@@ -112,11 +116,21 @@ export function splitBySubtitleCues(
   format: 'srt' | 'vtt',
   maxChars: number
 ): string[] {
-  const cuePattern = format === 'srt'
-    ? /^\d+\n\d{2}:\d{2}:\d{2},\d{3}\s-->\s\d{2}:\d{2}:\d{2},\d{3}/
-    : /^WEBVTT\n|^(\d{2}:\d{2}:\d{2}\.\d{3}\s-->\s\d{2}:\d{2}:\d{2}\.\d{3})/m;
+  const blocks = text
+    .replace(/\r\n?/g, '\n')
+    .trim()
+    .split(/\n\s*\n/)
+    .map(block => block.trim())
+    .filter(Boolean);
+  const cues = blocks.filter(block =>
+    format === 'srt'
+      ? /^\d+\n\d{2}:\d{2}:\d{2},\d{3}\s*-->\s*\d{2}:\d{2}:\d{2},\d{3}/.test(block)
+      : /\d{2}:\d{2}:\d{2}\.\d{3}\s*-->\s*\d{2}:\d{2}:\d{2}\.\d{3}/.test(block)
+  );
 
-  const cues = text.split(cuePattern).filter(Boolean);
+  if (cues.length === 0) return [text];
+
+  const header = format === 'vtt' && /^WEBVTT\b/i.test(blocks[0]) ? blocks[0] : '';
   const chunks: string[] = [];
   let currentChunk = '';
   let currentSize = 0;
@@ -133,17 +147,16 @@ export function splitBySubtitleCues(
       currentSize = 0;
     }
 
-    if (format === 'srt') {
-      const cueIndex = chunks.length + 1;
-      currentChunk += `${cueIndex}\n${trimmed}\n`;
-    } else {
-      currentChunk += `${trimmed}\n`;
-    }
+    currentChunk += `${trimmed}\n\n`;
     currentSize += cueSize;
   }
 
   if (currentChunk.trim()) {
     chunks.push(currentChunk.trim());
+  }
+
+  if (header && chunks.length > 0) {
+    chunks[0] = `${header}\n\n${chunks[0]}`;
   }
 
   return chunks.length > 0 ? chunks : [text];
@@ -187,7 +200,7 @@ export function splitYAML(
     return [text];
   }
 
-  const docs = text.split(/^---$/m);
+  const docs = text.split(/(?=^---\s*$)/m).filter(doc => doc.trim());
   const chunks: string[] = [];
   let currentDoc = '';
 
@@ -199,7 +212,7 @@ export function splitYAML(
       currentDoc = '';
     }
 
-    currentDoc += (currentDoc ? '\n---\n' : '') + doc;
+    currentDoc += (currentDoc ? '\n' : '') + doc;
   }
 
   if (currentDoc.trim()) {
@@ -256,12 +269,10 @@ export function mergeChunks(
   if (chunks.length === 1) return chunks[0];
 
   if (format === 'csv') {
-    const lines = chunks.join('\n').split('\n').filter((line, index, arr) => {
-      if (index === 0) return true;
-      const prevLine = arr[index - 1];
-      return line !== prevLine || line.includes(',');
-    });
-    return lines.join('\n');
+    const lines = chunks.join('\n').split('\n');
+    const header = lines[0];
+    const merged = lines.filter((line, index) => index === 0 || line !== header);
+    return merged.join('\n');
   }
 
   if (format === 'srt' || format === 'vtt') {

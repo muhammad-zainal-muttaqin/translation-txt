@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   validateFile,
   validateProviderConfig,
+  validateTranslationOutput,
 } from '../lib/validation'
 import type { FileState } from '../types'
 
@@ -257,6 +258,45 @@ describe('validation', () => {
       expect(result.issues).toContainEqual(
         expect.objectContaining({ code: 'MISSING_API_KEY' })
       )
+    })
+  })
+
+  describe('validateTranslationOutput', () => {
+    it('rejects empty, truncated, and meta-commentary output', () => {
+      const result = validateTranslationOutput(
+        'source',
+        'Here is the translation:\nI cannot translate this.',
+        'txt',
+        { finishReason: 'length', rawOutput: 'Here is the translation:\nI cannot translate this.' }
+      )
+
+      expect(result.valid).toBe(false)
+      expect(result.issues.map(issue => issue.code)).toEqual(
+        expect.arrayContaining(['TRUNCATED_OUTPUT', 'META_COMMENTARY', 'REFUSAL'])
+      )
+      expect(validateTranslationOutput('one\ntwo', 'satu', 'txt').issues).toContainEqual(
+        expect.objectContaining({ code: 'LINE_STRUCTURE_CHANGED' })
+      )
+    })
+
+    it('preserves JSON shape, CSV columns, and subtitle timestamps', () => {
+      expect(validateTranslationOutput(
+        '{"name":"old","items":[1]}',
+        '{"name":"baru","items":[2]}',
+        'json'
+      ).valid).toBe(true)
+
+      expect(validateTranslationOutput(
+        'name,age\nAna,20',
+        'nama,usia\nAna',
+        'csv'
+      ).issues).toContainEqual(expect.objectContaining({ code: 'CSV_COLUMN_COUNT_CHANGED' }))
+
+      expect(validateTranslationOutput(
+        '1\n00:00:01,000 --> 00:00:02,000\nHello',
+        '1\n00:00:01,000 --> 00:00:03,000\nHalo',
+        'srt'
+      ).issues).toContainEqual(expect.objectContaining({ code: 'SUBTITLE_TIMESTAMPS_CHANGED' }))
     })
   })
 })

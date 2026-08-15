@@ -76,6 +76,7 @@ export interface ChunkRecord {
   error: string | null;
   diagnostics: ChunkDiagnostic[];
   validationIssues: ValidationIssue[];
+  rescueCount?: number;
 }
 
 export type ChunkStatus = 

@@ -5,12 +5,13 @@ import type {
   ActiveRun,
   ChunkRecord,
   ProviderConfig,
+  ValidationIssue,
 } from '../types';
 import { callProvider } from './providers';
 import { splitFileContent, mergeChunks } from './chunker';
 import { buildTranslationPrompt } from './prompts';
 import { sanitizeTranslationOutput, detectMetaCommentary } from './sanitize';
-import { validateFile, validateProviderConfig } from './validation';
+import * as validation from './validation';
 import { saveActiveRun, generateRunId, addSessionLog } from './storage';
 
 export interface TranslationProgress {
@@ -40,12 +41,12 @@ export interface TranslationConfig {
   abortSignal: AbortSignal;
 }
 
-// Chunk timeout: long-running chunks can legitimately take a while on larger models.
 const CHUNK_TIMEOUT_MS = 30 * 60 * 1000;
-// Delay antar wave untuk menghindari rate limit
 const WAVE_DELAY_MS = 500;
-// Retry delay saat rate limit
-const RATE_LIMIT_RETRY_DELAY_MS = 2000;
+const MAX_RETRIES = 5;
+const MAX_ATTEMPTS = MAX_RETRIES + 1;
+const RETRY_BASE_DELAY_MS = 50;
+const MAX_RETRY_DELAY_MS = 60 * 1000;
 
 function buildProviderConfig(draft: DraftSettings): ProviderConfig {
   return {
@@ -60,19 +61,87 @@ function buildProviderConfig(draft: DraftSettings): ProviderConfig {
   };
 }
 
-// Check if error is rate limit
+function errorProperty(error: unknown, key: string): unknown {
+  if (!error || typeof error !== 'object') return undefined;
+  return (error as Record<string, unknown>)[key];
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error || 'Unknown provider error');
+}
+
+function errorStatus(error: unknown): number | null {
+  const status = errorProperty(error, 'status');
+  if (typeof status === 'number') return status;
+  if (typeof status === 'string' && /^\d{3}$/.test(status)) return Number(status);
+
+  const match = errorMessage(error).match(/\b([45]\d{2})\b/);
+  return match ? Number(match[1]) : null;
+}
+
+function retryAfterMs(error: unknown): number | null {
+  const direct = errorProperty(error, 'retryAfterMs');
+  if (typeof direct === 'number' && Number.isFinite(direct)) return Math.max(0, direct);
+
+  const seconds = errorProperty(error, 'retryAfter');
+  if (typeof seconds === 'number' && Number.isFinite(seconds)) return Math.max(0, seconds * 1000);
+
+  const headerMatch = errorMessage(error).match(/retry-after\s*:\s*(\d+(?:\.\d+)?)/i);
+  return headerMatch ? Math.max(0, Number(headerMatch[1]) * 1000) : null;
+}
+
 function isRateLimitError(error: unknown): boolean {
-  if (error instanceof Error) {
-    const msg = error.message.toLowerCase();
-    return (
-      msg.includes('429') ||
-      msg.includes('rate limit') ||
-      msg.includes('too many requests') ||
-      msg.includes('rate_limit_exceeded') ||
-      msg.includes('throttled')
-    );
+  const status = errorStatus(error);
+  if (status === 429) return true;
+  return /429|rate limit|too many requests|rate_limit_exceeded|throttled/i.test(errorMessage(error));
+}
+
+function isPermanentProviderError(error: unknown): boolean {
+  const status = errorStatus(error);
+  if (status !== null && [400, 401, 403, 404, 405, 422].includes(status)) return true;
+
+  return /invalid config|invalid configuration|unknown protocol|invalid endpoint|model not found|model unavailable|unknown model|unsupported model|authentication failed|unauthorized|forbidden/i.test(
+    errorMessage(error)
+  );
+}
+
+function isRetryableProviderError(error: unknown): boolean {
+  if (isPermanentProviderError(error)) return false;
+
+  const status = errorStatus(error);
+  if (status !== null) {
+    return status === 408 || status === 409 || status === 425 || status === 429 || status >= 500;
   }
-  return false;
+
+  return /timeout|timed out|network|failed to fetch|fetch failed|econn|enotfound|socket|temporar|empty response|content blocked|refusal|server error|internal server|service unavailable|bad gateway|gateway timeout/i.test(
+    errorMessage(error)
+  );
+}
+
+function retryDelay(retryNumber: number, error?: unknown): number {
+  const serverDelay = error ? retryAfterMs(error) : null;
+  if (serverDelay !== null) return Math.min(MAX_RETRY_DELAY_MS, serverDelay);
+  return Math.min(MAX_RETRY_DELAY_MS, RETRY_BASE_DELAY_MS * 2 ** Math.max(0, retryNumber - 1));
+}
+
+function waitForDelay(delayMs: number, abortSignal: AbortSignal): Promise<boolean> {
+  if (abortSignal.aborted) return Promise.resolve(false);
+
+  return new Promise(resolve => {
+    let settled = false;
+    let clearTimer = () => {};
+    const finish = (value: boolean) => {
+      if (settled) return;
+      settled = true;
+      clearTimer();
+      abortSignal.removeEventListener('abort', onAbort);
+      resolve(value);
+    };
+    const onAbort = () => finish(false);
+    const timer = setTimeout(() => finish(true), delayMs);
+    clearTimer = () => clearTimeout(timer);
+    abortSignal.addEventListener('abort', onAbort, { once: true });
+  });
 }
 
 function notifyRunUpdate(run: ActiveRun, callbacks: TranslationCallbacks): void {
@@ -80,9 +149,7 @@ function notifyRunUpdate(run: ActiveRun, callbacks: TranslationCallbacks): void 
 }
 
 function getCompletedChunkCount(run: ActiveRun): number {
-  return run.chunks.filter(
-    (chunk) => chunk.status === 'success' || chunk.status === 'truncated'
-  ).length;
+  return run.chunks.filter(chunk => chunk.status === 'success').length;
 }
 
 function updateRunProgress(
@@ -128,15 +195,396 @@ function persistRun(run: ActiveRun, callbacks: TranslationCallbacks): void {
 
 type ChunkResult =
   | { success: true; translatedText: string }
-  | { success: false; error: string };
+  | { success: false; error: string; aborted?: boolean };
 
-type WaveOutcome = 'success' | 'paused' | 'failed' | 'fallback_to_sequential';
+type WaveOutcome = 'success' | 'paused' | 'failed';
 
 interface WaveResult {
   outcome: WaveOutcome;
 }
 
-// Run single chunk with timeout and retry logic
+interface LeafResult {
+  success: boolean;
+  translatedText?: string;
+  error?: string;
+  aborted?: boolean;
+  validationIssue?: ValidationIssue;
+}
+
+function fallbackValidateOutput(
+  original: string,
+  translated: string,
+  format: string,
+  finishReason: string | undefined,
+  rawOutput: string
+): { valid: boolean; issues: ValidationIssue[] } {
+  const issues: ValidationIssue[] = [];
+  if (!translated.trim()) {
+    issues.push({ level: 'error', code: 'EMPTY_OUTPUT', message: 'The provider returned empty output.' });
+  }
+  if (finishReason && ['length', 'max_tokens'].includes(finishReason.toLowerCase())) {
+    issues.push({ level: 'error', code: 'TRUNCATED_OUTPUT', message: 'The provider stopped at the output length limit.' });
+  }
+  if (/<\/?(?:think|thinking|reasoning)>|\[\/?thinking\]|\b(?:analysis|reasoning|thought process)\s*:/i.test(rawOutput)) {
+    issues.push({ level: 'error', code: 'REASONING_LEAK', message: 'The output contains reasoning markers.' });
+  }
+  const meta = detectMetaCommentary(rawOutput);
+  if (meta.flagged) {
+    issues.push({ level: 'error', code: 'META_COMMENTARY', message: `The output contains task commentary: ${meta.markers.join(', ')}.` });
+  }
+  if (/cannot translate|unable to translate|refuse to translate|saya tidak bisa menerjemahkan/i.test(rawOutput)) {
+    issues.push({ level: 'error', code: 'REFUSAL', message: 'The provider refused to translate the part.' });
+  }
+  if (/^\s*(?:here(?:'s| is)?|translation|terjemahan|berikut)[^\n:]*:\s*(?:\r?\n|$)/i.test(rawOutput)) {
+    issues.push({ level: 'error', code: 'META_COMMENTARY', message: 'The output contains a preamble.' });
+  }
+  void original;
+  void format;
+  return { valid: !issues.length, issues };
+}
+
+function validateLeafOutput(
+  original: string,
+  translated: string,
+  format: string,
+  finishReason: string | undefined,
+  rawOutput: string
+): { valid: boolean; issues: ValidationIssue[] } {
+  let validator: typeof validation.validateTranslationOutput | undefined;
+  try {
+    validator = validation.validateTranslationOutput;
+  } catch {
+    validator = undefined;
+  }
+
+  if (typeof validator === 'function') {
+    try {
+      return validator(original, translated, format, {
+        rawOutput,
+        finishReason,
+      });
+    } catch (error) {
+      return {
+        valid: false,
+        issues: [{
+          level: 'error',
+          code: 'OUTPUT_VALIDATION_ERROR',
+          message: errorMessage(error),
+        }],
+      };
+    }
+  }
+
+  return fallbackValidateOutput(original, translated, format, finishReason, rawOutput);
+}
+
+function withChunkIndex(issue: ValidationIssue, chunkIndex: number): ValidationIssue {
+  return { ...issue, chunkIndex };
+}
+
+function recordRetry(
+  record: ChunkRecord,
+  chunkIndex: number,
+  retryNumber: number,
+  reasonCode: string,
+  reason: string
+): void {
+  record.retryCount = retryNumber;
+  record.diagnostics.push({
+    timestamp: Date.now(),
+    type: 'warning',
+    code: reasonCode,
+    message: `Retry ${retryNumber}/${MAX_RETRIES}: ${reason}`,
+  });
+  addSessionLog(`Part ${chunkIndex + 1}: retry ${retryNumber}/${MAX_RETRIES} because ${reason}`, 'warning');
+}
+
+async function requestLeaf(
+  run: ActiveRun,
+  chunkIndex: number,
+  source: string,
+  format: string,
+  chunkConfig: ChunkConfig,
+  draft: DraftSettings,
+  providerConfig: ProviderConfig,
+  record: ChunkRecord,
+  callbacks: TranslationCallbacks,
+  abortSignal: AbortSignal
+): Promise<LeafResult> {
+  let reinforceOutputContract = false;
+
+  record.retryCount = 0;
+  record.error = null;
+  record.translatedCore = '';
+  record.startTime = record.startTime || Date.now();
+
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    if (abortSignal.aborted) {
+      record.status = 'pending';
+      record.startTime = null;
+      record.endTime = null;
+      notifyRunUpdate(run, callbacks);
+      return { success: false, error: 'Aborted', aborted: true };
+    }
+
+    try {
+      record.status = 'running';
+      record.error = null;
+      notifyRunUpdate(run, callbacks);
+      callbacks.onChunkStart(chunkIndex);
+      addSessionLog(`Part ${chunkIndex + 1}: API request ${attempt + 1}/${MAX_ATTEMPTS}`, 'info');
+
+      const prompt = buildTranslationPrompt(source, format, {
+        sourceLanguage: chunkConfig.sourceLanguage,
+        targetLanguage: chunkConfig.targetLanguage,
+        customInstruction: chunkConfig.instruction,
+        useDefaultInstruction: draft.useDefaultInstruction,
+      }, { reinforceOutputContract });
+
+      const response = await callProvider(providerConfig, prompt, {
+        signal: abortSignal,
+        timeoutMs: CHUNK_TIMEOUT_MS,
+      });
+
+      if (abortSignal.aborted) {
+        record.status = 'pending';
+        record.startTime = null;
+        record.endTime = null;
+        notifyRunUpdate(run, callbacks);
+        return { success: false, error: 'Aborted', aborted: true };
+      }
+
+      const rawOutput = typeof response?.content === 'string' ? response.content : '';
+      const translatedText = sanitizeTranslationOutput(rawOutput, format);
+      const outputValidation = validateLeafOutput(
+        source,
+        translatedText,
+        format,
+        response?.finishReason,
+        rawOutput
+      );
+
+      if (outputValidation.valid) {
+        record.status = 'success';
+        record.translatedCore = translatedText;
+        record.endTime = Date.now();
+        record.error = null;
+        notifyRunUpdate(run, callbacks);
+        return { success: true, translatedText };
+      }
+
+      const validationIssue = withChunkIndex(
+        outputValidation.issues.find(issue => issue.code === 'TRUNCATED_OUTPUT') ||
+          outputValidation.issues.find(issue => issue.level === 'error') || {
+          level: 'error',
+          code: 'OUTPUT_INVALID',
+          message: 'Output failed validation.',
+        },
+        chunkIndex
+      );
+      reinforceOutputContract = true;
+
+      if (attempt < MAX_RETRIES) {
+        const retryNumber = attempt + 1;
+        recordRetry(record, chunkIndex, retryNumber, validationIssue.code, validationIssue.message);
+        notifyRunUpdate(run, callbacks);
+        const shouldContinue = await waitForDelay(retryDelay(retryNumber), abortSignal);
+        if (!shouldContinue) {
+          record.status = 'pending';
+          record.startTime = null;
+          record.endTime = null;
+          notifyRunUpdate(run, callbacks);
+          return { success: false, error: 'Aborted', aborted: true };
+        }
+        continue;
+      }
+
+      return {
+        success: false,
+        error: validationIssue.message,
+        validationIssue,
+      };
+    } catch (error) {
+      if (abortSignal.aborted || (error instanceof DOMException && error.name === 'AbortError')) {
+        record.status = 'pending';
+        record.startTime = null;
+        record.endTime = null;
+        notifyRunUpdate(run, callbacks);
+        return { success: false, error: 'Aborted', aborted: true };
+      }
+
+      const message = errorMessage(error);
+      if (isRetryableProviderError(error) && attempt < MAX_RETRIES) {
+        const retryNumber = attempt + 1;
+        const delay = retryDelay(retryNumber, error);
+        const reason = isRateLimitError(error)
+          ? `rate limit, waiting ${delay}ms`
+          : `${message}, waiting ${delay}ms`;
+        recordRetry(record, chunkIndex, retryNumber, isRateLimitError(error) ? 'RATE_LIMIT' : 'RETRYABLE_PROVIDER_ERROR', reason);
+        notifyRunUpdate(run, callbacks);
+        const shouldContinue = await waitForDelay(delay, abortSignal);
+        if (!shouldContinue) {
+          record.status = 'pending';
+          record.startTime = null;
+          record.endTime = null;
+          notifyRunUpdate(run, callbacks);
+          return { success: false, error: 'Aborted', aborted: true };
+        }
+        continue;
+      }
+
+      return { success: false, error: message };
+    }
+  }
+
+  return { success: false, error: 'Maximum retry attempts exceeded.' };
+}
+
+function createTemporaryChunk(index: number, original: string): ChunkRecord {
+  return {
+    index,
+    original,
+    translatedCore: '',
+    status: 'pending',
+    startTime: null,
+    endTime: null,
+    retryCount: 0,
+    error: null,
+    diagnostics: [],
+    validationIssues: [],
+  };
+}
+
+function canAdaptiveSplit(format: string): boolean {
+  return format !== 'json' && format !== 'xml';
+}
+
+async function rescueTruncatedChunk(
+  run: ActiveRun,
+  chunkIndex: number,
+  file: FileState,
+  chunkConfig: ChunkConfig,
+  draft: DraftSettings,
+  providerConfig: ProviderConfig,
+  record: ChunkRecord,
+  callbacks: TranslationCallbacks,
+  abortSignal: AbortSignal
+): Promise<LeafResult> {
+  if (!canAdaptiveSplit(file.format)) {
+    record.diagnostics.push({
+      timestamp: Date.now(),
+      type: 'error',
+      code: 'ADAPTIVE_SUBSPLIT_UNAVAILABLE',
+      message: `${file.format.toUpperCase()} cannot be split safely as text.`,
+    });
+    return {
+      success: false,
+      error: 'Truncated output cannot be safely split for this format.',
+      validationIssue: {
+        level: 'error',
+        code: 'ADAPTIVE_SUBSPLIT_UNAVAILABLE',
+        message: 'Truncated output cannot be safely split for this format.',
+        chunkIndex,
+      },
+    };
+  }
+
+  const rescueMaxChars = Math.max(1000, Math.ceil(record.original.length / 2));
+  const rescue = splitFileContent(record.original, file.format, {
+    maxCharsPerChunk: rescueMaxChars,
+    overlapLines: 0,
+    autoSplit: false,
+  });
+  const subparts = rescue.chunks.filter(part => part.length > 0);
+
+  if (subparts.length < 2) {
+    record.diagnostics.push({
+      timestamp: Date.now(),
+      type: 'error',
+      code: 'ADAPTIVE_SUBSPLIT_UNAVAILABLE',
+      message: 'The existing splitter could not produce smaller safe subparts.',
+    });
+    return {
+      success: false,
+      error: 'The truncated part could not be split into safe subparts.',
+      validationIssue: {
+        level: 'error',
+        code: 'ADAPTIVE_SUBSPLIT_UNAVAILABLE',
+        message: 'The truncated part could not be split into safe subparts.',
+        chunkIndex,
+      },
+    };
+  }
+
+  record.rescueCount = subparts.length;
+  record.diagnostics.push({
+    timestamp: Date.now(),
+    type: 'info',
+    code: 'ADAPTIVE_SUBSPLIT',
+    message: `Truncation persisted after ${MAX_ATTEMPTS} requests; translating ${subparts.length} subparts sequentially.`,
+  });
+
+  const translatedSubparts: string[] = [];
+  for (let index = 0; index < subparts.length; index++) {
+    if (abortSignal.aborted) {
+      return { success: false, error: 'Aborted', aborted: true };
+    }
+
+    const subpartRecord = createTemporaryChunk(index, subparts[index]);
+    const result = await requestLeaf(
+      run,
+      chunkIndex,
+      subparts[index],
+      file.format,
+      chunkConfig,
+      draft,
+      providerConfig,
+      subpartRecord,
+      callbacks,
+      abortSignal
+    );
+
+    record.diagnostics.push(...subpartRecord.diagnostics.map(diagnostic => ({
+      ...diagnostic,
+      message: `Subpart ${index + 1}: ${diagnostic.message}`,
+    })));
+
+    if (!result.success) {
+      record.diagnostics.push({
+        timestamp: Date.now(),
+        type: 'error',
+        code: 'RESCUE_SUBPART_FAILED',
+        message: `Subpart ${index + 1}/${subparts.length} failed: ${result.error || 'Unknown rescue error'}`,
+      });
+      return result;
+    }
+
+    translatedSubparts.push(result.translatedText || '');
+  }
+
+  const translatedText = mergeChunks(translatedSubparts, 0, file.format);
+  const mergedValidation = validateLeafOutput(
+    record.original,
+    translatedText,
+    file.format,
+    undefined,
+    translatedText
+  );
+  if (!mergedValidation.valid) {
+    const validationIssue = withChunkIndex(
+      mergedValidation.issues.find(issue => issue.level === 'error') || {
+        level: 'error',
+        code: 'RESCUED_OUTPUT_INVALID',
+        message: 'The rescued output failed final part validation.',
+      },
+      chunkIndex
+    );
+    return { success: false, error: validationIssue.message, validationIssue };
+  }
+
+  return { success: true, translatedText };
+}
+
 async function runSingleChunk(
   run: ActiveRun,
   chunkIndex: number,
@@ -148,144 +596,89 @@ async function runSingleChunk(
   abortSignal: AbortSignal
 ): Promise<ChunkResult> {
   const chunkRecord = run.chunks[chunkIndex];
-  const maxRetries = draft.refusalRecoveryEnabled ? 2 : 0;
-  let attempt = 0;
-  let reinforceOutputContract = false;
+  chunkRecord.status = 'running';
+  chunkRecord.translatedCore = '';
+  chunkRecord.error = null;
+  chunkRecord.retryCount = 0;
+  chunkRecord.rescueCount = 0;
+  chunkRecord.validationIssues = [];
+  run.finalValidationIssues = (run.finalValidationIssues || []).filter(issue => issue.chunkIndex !== chunkIndex);
 
-  while (attempt <= maxRetries) {
-    if (abortSignal.aborted) {
-      return { success: false, error: 'Aborted' };
-    }
+  const result = await requestLeaf(
+    run,
+    chunkIndex,
+    chunkRecord.original,
+    file.format,
+    chunkConfig,
+    draft,
+    providerConfig,
+    chunkRecord,
+    callbacks,
+    abortSignal
+  );
 
-    try {
-      chunkRecord.status = 'running';
-      chunkRecord.startTime = Date.now();
-      chunkRecord.error = null;
-      notifyRunUpdate(run, callbacks);
-
-      callbacks.onChunkStart(chunkIndex);
-      addSessionLog(`Chunk ${chunkIndex + 1}: API call started (attempt ${attempt + 1})`, 'info');
-
-      const prompt = buildTranslationPrompt(chunkRecord.original, file.format, {
-        sourceLanguage: chunkConfig.sourceLanguage,
-        targetLanguage: chunkConfig.targetLanguage,
-        customInstruction: chunkConfig.instruction,
-        useDefaultInstruction: draft.useDefaultInstruction,
-      }, { reinforceOutputContract });
-
-      // Race between API call and timeout
-      const response = await Promise.race([
-        callProvider(providerConfig, prompt, {
-          signal: abortSignal,
-          timeoutMs: CHUNK_TIMEOUT_MS,
-        }),
-        new Promise<never>((_, reject) => {
-          setTimeout(() => reject(new Error('Chunk timeout')), CHUNK_TIMEOUT_MS);
-        }),
-      ]);
-
-      if (abortSignal.aborted) {
-        chunkRecord.status = 'pending';
-        chunkRecord.startTime = null;
-        notifyRunUpdate(run, callbacks);
-        return { success: false, error: 'Aborted' };
-      }
-
-      const translatedText = sanitizeTranslationOutput(response.content, file.format);
-
-      if (response.finishReason === 'length') {
-        chunkRecord.status = 'truncated';
-        chunkRecord.error = 'Output was truncated due to length limits.';
-        chunkRecord.translatedCore = translatedText;
-        chunkRecord.endTime = Date.now();
-        chunkRecord.retryCount = attempt;
-        notifyRunUpdate(run, callbacks);
-        addSessionLog(`Chunk ${chunkIndex + 1}: truncated`, 'warning');
-        callbacks.onChunkError(chunkIndex, chunkRecord.error);
-        return { success: true, translatedText };
-      }
-
-      // Detect the model narrating the task instead of translating it.
-      const meta = detectMetaCommentary(translatedText);
-      if (meta.flagged && attempt < maxRetries) {
-        reinforceOutputContract = true;
-        attempt++;
-        chunkRecord.retryCount = attempt;
-        chunkRecord.diagnostics.push({
-          timestamp: Date.now(),
-          type: 'warning',
-          code: 'META_COMMENTARY',
-          message: `Response looked like task commentary (${meta.markers.join(', ')}); retrying with a stricter prompt (${attempt}/${maxRetries}).`,
-        });
-        notifyRunUpdate(run, callbacks);
-        addSessionLog(`Chunk ${chunkIndex + 1}: output looked like commentary, retrying (${attempt}/${maxRetries})`, 'warning');
-        continue;
-      }
-
-      chunkRecord.status = 'success';
-      chunkRecord.translatedCore = translatedText;
-      chunkRecord.endTime = Date.now();
-      chunkRecord.retryCount = attempt;
-      chunkRecord.error = null;
-
-      // Kept the best-effort text, but the leak survived retries: flag for review.
-      if (meta.flagged) {
-        chunkRecord.validationIssues.push({
-          level: 'warning',
-          code: 'META_COMMENTARY',
-          message: `Part ${chunkIndex + 1} may contain the model's own notes instead of a clean translation (${meta.markers.join(', ')}). Please review this part.`,
-          chunkIndex,
-        });
-        addSessionLog(`Chunk ${chunkIndex + 1}: possible commentary left after retries — flagged for review`, 'warning');
-      }
-
-      notifyRunUpdate(run, callbacks);
-      addSessionLog(`Chunk ${chunkIndex + 1}: completed in ${((chunkRecord.endTime - chunkRecord.startTime) / 1000).toFixed(1)}s`, 'info');
-      callbacks.onChunkComplete(chunkIndex, translatedText);
-      return { success: true, translatedText };
-
-    } catch (error) {
-      // Handle abort
-      if (abortSignal.aborted || (error instanceof DOMException && error.name === 'AbortError')) {
-        chunkRecord.status = 'pending';
-        chunkRecord.startTime = null;
-        notifyRunUpdate(run, callbacks);
-        return { success: false, error: 'Aborted' };
-      }
-
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-
-      // Check if it's a timeout
-      if (errorMessage.includes('timeout')) {
-        addSessionLog(`Chunk ${chunkIndex + 1}: timeout after ${CHUNK_TIMEOUT_MS / 1000}s`, 'error');
-      }
-
-      // Check if it's rate limit
-      if (isRateLimitError(error) && attempt < maxRetries) {
-        attempt++;
-        addSessionLog(`Chunk ${chunkIndex + 1}: rate limited, waiting ${RATE_LIMIT_RETRY_DELAY_MS}ms before retry ${attempt}/${maxRetries}`, 'warning');
-        await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_RETRY_DELAY_MS));
-        continue;
-      }
-
-      // Fatal error
-      chunkRecord.status = 'failed';
-      chunkRecord.error = errorMessage;
-      chunkRecord.endTime = Date.now();
-      chunkRecord.retryCount = attempt;
-
-      notifyRunUpdate(run, callbacks);
-      addSessionLog(`Chunk ${chunkIndex + 1}: failed - ${errorMessage}`, 'error');
-      callbacks.onChunkError(chunkIndex, errorMessage);
-      
-      return { success: false, error: errorMessage };
-    }
+  if (result.success) {
+    chunkRecord.status = 'success';
+    chunkRecord.translatedCore = result.translatedText || '';
+    chunkRecord.endTime = Date.now();
+    notifyRunUpdate(run, callbacks);
+    callbacks.onChunkComplete(chunkIndex, chunkRecord.translatedCore);
+    return { success: true, translatedText: chunkRecord.translatedCore };
   }
 
-  return { success: false, error: 'Max retries exceeded' };
+  if (result.aborted) {
+    chunkRecord.status = 'pending';
+    chunkRecord.startTime = null;
+    chunkRecord.endTime = null;
+    notifyRunUpdate(run, callbacks);
+    return { success: false, error: 'Aborted', aborted: true };
+  }
+
+  if (result.validationIssue?.code === 'TRUNCATED_OUTPUT') {
+    const rescueResult = await rescueTruncatedChunk(
+      run,
+      chunkIndex,
+      file,
+      chunkConfig,
+      draft,
+      providerConfig,
+      chunkRecord,
+      callbacks,
+      abortSignal
+    );
+    if (rescueResult.success) {
+      chunkRecord.status = 'success';
+      chunkRecord.translatedCore = rescueResult.translatedText || '';
+      chunkRecord.error = null;
+      chunkRecord.endTime = Date.now();
+      notifyRunUpdate(run, callbacks);
+      callbacks.onChunkComplete(chunkIndex, chunkRecord.translatedCore);
+      return { success: true, translatedText: chunkRecord.translatedCore };
+    }
+    if (rescueResult.aborted) {
+      chunkRecord.status = 'pending';
+      chunkRecord.startTime = null;
+      chunkRecord.endTime = null;
+      notifyRunUpdate(run, callbacks);
+      return { success: false, error: 'Aborted', aborted: true };
+    }
+    result.validationIssue = rescueResult.validationIssue || result.validationIssue;
+    result.error = rescueResult.error || 'Rescue failed.';
+  }
+
+  chunkRecord.status = result.validationIssue ? 'failed-validation' : 'failed';
+  chunkRecord.error = result.error || 'Part failed.';
+  chunkRecord.endTime = Date.now();
+  if (result.validationIssue) {
+    chunkRecord.validationIssues = [result.validationIssue];
+    run.finalValidationIssues = [...(run.finalValidationIssues || []), result.validationIssue];
+  }
+  notifyRunUpdate(run, callbacks);
+  callbacks.onChunkError(chunkIndex, chunkRecord.error);
+  addSessionLog(`Part ${chunkIndex + 1}: failed validation or provider request: ${chunkRecord.error}`, 'error');
+  return { success: false, error: chunkRecord.error };
 }
 
-// Run a wave of chunks in parallel
 async function runWave(
   run: ActiveRun,
   chunkIndices: number[],
@@ -296,164 +689,79 @@ async function runWave(
   callbacks: TranslationCallbacks,
   abortSignal: AbortSignal
 ): Promise<WaveResult> {
-  
-  if (chunkIndices.length === 0) {
-    return { outcome: 'success' };
-  }
+  if (chunkIndices.length === 0) return { outcome: 'success' };
 
-  const waveIndex = Math.floor(chunkIndices[0] / chunkConfig.maxParallelChunks) + 1;
-  const totalWaves = Math.ceil(run.chunks.length / chunkConfig.maxParallelChunks);
-  
-  // Mark all chunks as running
-  chunkIndices.forEach((idx) => {
-    run.chunks[idx].status = 'running';
-    run.chunks[idx].startTime = Date.now();
-    run.chunks[idx].error = null;
+  const maxParallel = Math.max(1, chunkConfig.maxParallelChunks);
+  const waveIndex = Math.floor(chunkIndices[0] / maxParallel) + 1;
+  const totalWaves = Math.ceil(run.chunks.length / maxParallel);
+
+  chunkIndices.forEach(index => {
+    run.chunks[index].status = 'running';
+    run.chunks[index].startTime = run.chunks[index].startTime || Date.now();
+    run.chunks[index].error = null;
   });
   updateRunProgress(run, callbacks, chunkIndices, chunkIndices.length);
   notifyRunUpdate(run, callbacks);
-
-  addSessionLog(`Wave ${waveIndex}/${totalWaves}: Starting chunks ${chunkIndices.map(i => i + 1).join(', ')}`, 'info');
+  addSessionLog(`Wave ${waveIndex}/${totalWaves}: starting parts ${chunkIndices.map(i => i + 1).join(', ')}`, 'info');
   callbacks.onWaveStart?.(waveIndex, chunkIndices);
 
-  // Execute all chunks in parallel
-  const promises = chunkIndices.map((idx) =>
-    runSingleChunk(
-      run,
-      idx,
-      file,
-      chunkConfig,
-      draft,
-      providerConfig,
-      callbacks,
-      abortSignal
-    )
-  );
+  const results = await Promise.allSettled(chunkIndices.map(index => runSingleChunk(
+    run,
+    index,
+    file,
+    chunkConfig,
+    draft,
+    providerConfig,
+    callbacks,
+    abortSignal
+  )));
 
-  const results = await Promise.allSettled(promises);
-
-  // Check results
-  let rateLimitCount = 0;
   let abortCount = 0;
-  let successCount = 0;
   let failCount = 0;
-
-  results.forEach((result) => {
+  let successCount = 0;
+  results.forEach((result, resultIndex) => {
     if (result.status === 'fulfilled') {
-      if (result.value.success) {
-        successCount++;
-      } else if (result.value.error === 'Aborted') {
-        abortCount++;
-      } else {
-        failCount++;
-        // Check if error was rate limit
-        if (result.value.error && isRateLimitError(new Error(result.value.error))) {
-          rateLimitCount++;
-        }
-      }
+      if (result.value.success) successCount++;
+      else if (result.value.aborted) abortCount++;
+      else failCount++;
     } else {
       failCount++;
+      const index = chunkIndices[resultIndex];
+      run.chunks[index].status = 'failed';
+      run.chunks[index].error = errorMessage(result.reason);
+      run.chunks[index].endTime = Date.now();
     }
   });
 
-  updateRunProgress(run, callbacks, [], chunkConfig.maxParallelChunks);
+  updateRunProgress(run, callbacks, [], maxParallel);
   persistRun(run, callbacks);
   callbacks.onWaveComplete?.(waveIndex);
-  addSessionLog(`Wave ${waveIndex}: Completed (${successCount} success, ${failCount} fail, ${abortCount} abort)`, 'info');
+  addSessionLog(`Wave ${waveIndex}: ${successCount} success, ${failCount} failed, ${abortCount} aborted`, 'info');
 
-  if (abortCount > 0 && failCount === 0) {
-    return { outcome: 'paused' };
-  }
-
-  // If majority failed due to rate limit, suggest fallback
-  if (rateLimitCount >= chunkIndices.length / 2) {
-    addSessionLog(`Wave ${waveIndex}: Multiple rate limits detected, suggesting fallback to sequential`, 'warning');
-    return { outcome: 'fallback_to_sequential' };
-  }
-
-  // If any chunk failed (not just rate limit), stop
-  if (failCount > 0) {
-    return { outcome: 'failed' };
-  }
-
+  if (abortCount > 0 && failCount === 0) return { outcome: 'paused' };
+  if (failCount > 0) return { outcome: 'failed' };
   return { outcome: 'success' };
 }
 
-// Sequential fallback for rate-limited scenarios
-async function runSequential(
+function failRun(
   run: ActiveRun,
-  startIndex: number,
-  file: FileState,
-  chunkConfig: ChunkConfig,
-  draft: DraftSettings,
-  providerConfig: ProviderConfig,
   callbacks: TranslationCallbacks,
-  abortSignal: AbortSignal
-): Promise<'success' | 'paused' | 'failed'> {
-  
-  addSessionLog('Switching to sequential mode due to rate limiting', 'warning');
-  
-  const totalChunks = run.chunks.length;
-
-  for (let i = startIndex; i < totalChunks; i++) {
-    if (abortSignal.aborted) {
-      run.status = 'paused';
-      persistRun(run, callbacks);
-      addSessionLog('Translation paused by user', 'warning');
-      return 'paused';
-    }
-
-    const chunkRecord = run.chunks[i];
-    if (chunkRecord.status === 'success' || chunkRecord.status === 'truncated') {
-      continue;
-    }
-
-    updateRunProgress(run, callbacks, [i], 1);
-    const result = await runSingleChunk(
-      run,
-      i,
-      file,
-      chunkConfig,
-      draft,
-      providerConfig,
-      callbacks,
-      abortSignal
-    );
-
-    if (!result.success) {
-      if (result.error === 'Aborted') {
-        run.status = 'paused';
-        persistRun(run, callbacks);
-        return 'paused';
-      }
-
-      // Check for retries
-      if (chunkConfig.refusalRecoveryEnabled && chunkRecord.retryCount < 2) {
-        chunkRecord.retryCount++;
-        addSessionLog(`Retrying chunk ${i + 1} (${chunkRecord.retryCount}/2)...`, 'warning');
-        notifyRunUpdate(run, callbacks);
-        i--;
-        continue;
-      }
-
-      run.status = 'failed';
-      persistRun(run, callbacks);
-      callbacks.onError(result.error || 'Chunk failed');
-      return 'failed';
-    }
-
-    updateRunProgress(run, callbacks, [], 1);
-
-    // Small delay antar chunk dalam sequential mode
-    if (i < totalChunks - 1) {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-    }
+  message: string,
+  issue?: ValidationIssue
+): void {
+  run.status = 'failed';
+  run.completedAt = null;
+  if (issue && !(run.finalValidationIssues || []).some(existing =>
+    existing.code === issue.code && existing.chunkIndex === issue.chunkIndex
+  )) {
+    run.finalValidationIssues = [...(run.finalValidationIssues || []), issue];
   }
-
-  return 'success';
+  updateRunProgress(run, callbacks, [], 1);
+  persistRun(run, callbacks);
+  addSessionLog(`Translation failed: ${message}`, 'error');
+  callbacks.onError(message);
 }
 
-// Main chunk runner dengan parallel waves
 async function runChunks(
   run: ActiveRun,
   draft: DraftSettings,
@@ -462,40 +770,28 @@ async function runChunks(
   callbacks: TranslationCallbacks,
   abortSignal: AbortSignal
 ): Promise<void> {
-  
   const file = run.file;
   const chunkConfig = run.config;
   const totalChunks = run.chunks.length;
-  const maxParallel = chunkConfig.maxParallelChunks;
-
-  addSessionLog(`Starting translation with max ${maxParallel} parallel chunks`, 'info');
-
-  // Build waves
+  const maxParallel = Math.max(1, chunkConfig.maxParallelChunks);
   const waves: number[][] = [];
   let currentWave: number[] = [];
 
-  for (let i = startIndex; i < totalChunks; i++) {
-    if (run.chunks[i].status === 'success' || run.chunks[i].status === 'truncated') {
-      continue;
-    }
+  addSessionLog(`Starting translation with max ${maxParallel} parallel parts`, 'info');
 
-    currentWave.push(i);
-
+  for (let index = startIndex; index < totalChunks; index++) {
+    if (run.chunks[index].status === 'success') continue;
+    currentWave.push(index);
     if (currentWave.length >= maxParallel) {
       waves.push([...currentWave]);
       currentWave = [];
     }
   }
+  if (currentWave.length > 0) waves.push(currentWave);
 
-  if (currentWave.length > 0) {
-    waves.push(currentWave);
-  }
-
-  addSessionLog(`Created ${waves.length} waves for ${totalChunks - startIndex} remaining chunks`, 'info');
+  addSessionLog(`Created ${waves.length} waves for ${totalChunks - startIndex} remaining parts`, 'info');
 
   for (let waveIndex = 0; waveIndex < waves.length; waveIndex++) {
-    const wave = waves[waveIndex];
-
     if (abortSignal.aborted) {
       run.status = 'paused';
       persistRun(run, callbacks);
@@ -505,7 +801,7 @@ async function runChunks(
 
     const result = await runWave(
       run,
-      wave,
+      waves[waveIndex],
       file,
       chunkConfig,
       draft,
@@ -521,62 +817,72 @@ async function runChunks(
       return;
     }
 
-    if (result.outcome === 'fallback_to_sequential') {
-      const sequentialResult = await runSequential(
-        run,
-        wave[0],
-        file,
-        chunkConfig,
-        draft,
-        providerConfig,
-        callbacks,
-        abortSignal
-      );
-      if (sequentialResult !== 'success') {
-        return;
-      }
-      break;
-    }
-
     if (result.outcome === 'failed') {
-      run.status = 'failed';
-      persistRun(run, callbacks);
-      callbacks.onError(
-        run.chunks.find((chunk) => chunk.status === 'failed')?.error || 'Chunk failed'
-      );
+      const failedChunk = run.chunks.find(chunk => chunk.status !== 'success');
+      failRun(run, callbacks, failedChunk?.error || 'A part failed.');
       return;
     }
 
-    // Small delay antar wave untuk menghindari rate limit
     if (waveIndex < waves.length - 1) {
-      await new Promise(resolve => setTimeout(resolve, WAVE_DELAY_MS));
+      const shouldContinue = await waitForDelay(WAVE_DELAY_MS, abortSignal);
+      if (!shouldContinue) {
+        run.status = 'paused';
+        persistRun(run, callbacks);
+        addSessionLog('Translation paused by user', 'warning');
+        return;
+      }
     }
   }
 
-  // Merge and complete
+  const incompleteChunk = run.chunks.find(chunk => chunk.status !== 'success');
+  if (incompleteChunk) {
+    failRun(run, callbacks, incompleteChunk.error || 'Not all parts passed validation.');
+    return;
+  }
+
   const finalOutput = mergeChunks(
-    run.chunks.map(c => c.translatedCore),
+    run.chunks.map(chunk => chunk.translatedCore),
     chunkConfig.overlapLines,
     file.format
   );
+  const finalValidation = validateLeafOutput(
+    file.content,
+    finalOutput,
+    file.format,
+    undefined,
+    finalOutput
+  );
 
-  // Surface any per-chunk review flags (e.g. leaked commentary) to the user.
-  // persistRun -> onRunUpdate -> syncRunState dispatches these to the UI.
-  const chunkIssues = run.chunks.flatMap((c) => c.validationIssues);
-  if (chunkIssues.length > 0) {
-    const existing = run.finalValidationIssues ?? [];
-    run.finalValidationIssues = [...existing, ...chunkIssues];
+  if (!finalValidation.valid) {
+    const finalIssue = finalValidation.issues.find(issue => issue.level === 'error') || {
+      level: 'error' as const,
+      code: 'FINAL_VALIDATION_FAILED',
+      message: 'The merged translation failed final validation.',
+    };
+    run.finalValidationIssues = finalValidation.issues;
+    failRun(run, callbacks, finalIssue.message, finalIssue);
+    return;
   }
 
+  run.finalValidationIssues = finalValidation.issues;
   run.status = 'completed';
   run.completedAt = Date.now();
   updateRunProgress(run, callbacks, [], 1);
   run.progress.percent = 100;
   run.progress.etaSeconds = 0;
-
   persistRun(run, callbacks);
-  addSessionLog('Translation completed', 'info');
+  addSessionLog('Translation completed after all parts passed validation', 'info');
   callbacks.onComplete(finalOutput);
+}
+
+function providerValidationError(draft: DraftSettings): string | null {
+  const result = validation.validateProviderConfig({
+    endpointUrl: draft.endpointUrl,
+    model: draft.model,
+    apiKey: draft.apiKey,
+    extraHeadersJson: draft.extraHeadersJson,
+  });
+  return result.valid ? null : result.issues.map(item => item.message).join('; ');
 }
 
 export async function startTranslation(
@@ -584,38 +890,37 @@ export async function startTranslation(
   callbacks: TranslationCallbacks
 ): Promise<void> {
   const { file, draft, abortSignal } = config;
-
   addSessionLog('Starting translation process...', 'info');
 
-  const fileValidation = validateFile(file);
+  const fileValidation = validation.validateFile(file);
   if (!fileValidation.valid) {
-    const errorMsg = fileValidation.issues.map(i => i.message).join('; ');
+    const errorMsg = fileValidation.issues.map(item => item.message).join('; ');
     addSessionLog(`File validation failed: ${errorMsg}`, 'error');
     callbacks.onError(errorMsg);
     return;
   }
 
-  const providerValidation = validateProviderConfig({
-    endpointUrl: draft.endpointUrl,
-    model: draft.model,
-    apiKey: draft.apiKey,
-    extraHeadersJson: draft.extraHeadersJson,
-  });
-
-  if (!providerValidation.valid) {
-    const errorMsg = providerValidation.issues.map(i => i.message).join('; ');
-    addSessionLog(`Provider validation failed: ${errorMsg}`, 'error');
-    callbacks.onError(errorMsg);
+  const providerError = providerValidationError(draft);
+  if (providerError) {
+    addSessionLog(`Provider validation failed: ${providerError}`, 'error');
+    callbacks.onError(providerError);
     return;
   }
 
-  // Calculate actual parallel chunks with multiplier (capped at 100 for safety)
+  let providerConfig: ProviderConfig;
+  try {
+    providerConfig = buildProviderConfig(draft);
+  } catch (error) {
+    const message = `Provider configuration is invalid: ${errorMessage(error)}`;
+    addSessionLog(message, 'error');
+    callbacks.onError(message);
+    return;
+  }
+
   const baseParallel = draft.maxParallelChunks || 3;
   const multiplier = draft.parallelMultiplier || 1;
-  const actualMaxParallel = Math.min(100, baseParallel * multiplier);
-
-  // Diagnostic: log effective timeout and parallelism settings
-  addSessionLog(`[Diagnostic] Chunk timeout: ${CHUNK_TIMEOUT_MS / 1000}s, Effective parallel chunks: ${actualMaxParallel}`, 'info');
+  const actualMaxParallel = Math.max(1, Math.min(100, baseParallel * multiplier));
+  addSessionLog(`[Diagnostic] Chunk timeout: ${CHUNK_TIMEOUT_MS / 1000}s, Effective parallel parts: ${actualMaxParallel}, retries per part: ${MAX_RETRIES}`, 'info');
 
   const chunkConfig: ChunkConfig = {
     sourceLanguage: draft.sourceLanguage === 'custom' ? draft.sourceLanguageCustom : draft.sourceLanguage,
@@ -630,31 +935,14 @@ export async function startTranslation(
     autoSplit: draft.autoSplit,
   };
 
-  const { chunks: originalChunks } = splitFileContent(
-    file.content,
-    file.format,
-    {
-      maxCharsPerChunk: chunkConfig.maxCharsPerChunk,
-      overlapLines: chunkConfig.overlapLines,
-      autoSplit: chunkConfig.autoSplit,
-    }
-  );
+  const { chunks: originalChunks } = splitFileContent(file.content, file.format, {
+    maxCharsPerChunk: chunkConfig.maxCharsPerChunk,
+    overlapLines: chunkConfig.overlapLines,
+    autoSplit: chunkConfig.autoSplit,
+  });
+  addSessionLog(`Split into ${originalChunks.length} parts`, 'info');
 
-  addSessionLog(`Split into ${originalChunks.length} chunks`, 'info');
-
-  const chunkRecords: ChunkRecord[] = originalChunks.map((original, index) => ({
-    index,
-    original,
-    translatedCore: '',
-    status: 'pending' as const,
-    startTime: null,
-    endTime: null,
-    retryCount: 0,
-    error: null,
-    diagnostics: [],
-    validationIssues: [],
-  }));
-
+  const chunkRecords: ChunkRecord[] = originalChunks.map((original, index) => createTemporaryChunk(index, original));
   const run: ActiveRun = {
     id: generateRunId(),
     status: 'running',
@@ -677,9 +965,6 @@ export async function startTranslation(
   };
 
   saveActiveRun(run);
-
-  const providerConfig = buildProviderConfig(draft);
-
   await runChunks(run, draft, providerConfig, 0, callbacks, abortSignal);
 }
 
@@ -694,38 +979,36 @@ export async function resumeTranslation(
   callbacks: TranslationCallbacks
 ): Promise<void> {
   const { run, draft, abortSignal } = config;
-
-  // Diagnostic: log effective timeout and parallelism settings
-  const baseParallel = draft.maxParallelChunks || 3;
-  const multiplier = draft.parallelMultiplier || 1;
-  const effectiveParallel = Math.min(100, baseParallel * multiplier);
-  addSessionLog(`[Diagnostic] Chunk timeout: ${CHUNK_TIMEOUT_MS / 1000}s, Effective parallel chunks: ${effectiveParallel}`, 'info');
-
   addSessionLog('Resuming translation...', 'info');
 
-  const providerValidation = validateProviderConfig({
-    endpointUrl: draft.endpointUrl,
-    model: draft.model,
-    apiKey: draft.apiKey,
-    extraHeadersJson: draft.extraHeadersJson,
-  });
-
-  if (!providerValidation.valid) {
-    const errorMsg = providerValidation.issues.map(i => i.message).join('; ');
-    addSessionLog(`Provider validation failed: ${errorMsg}`, 'error');
-    callbacks.onError(errorMsg);
+  const providerError = providerValidationError(draft);
+  if (providerError) {
+    addSessionLog(`Provider validation failed: ${providerError}`, 'error');
+    callbacks.onError(providerError);
     return;
   }
 
-  const firstUnfinished = run.chunks.findIndex(c => c.status !== 'success' && c.status !== 'truncated');
-  const startIndex = firstUnfinished === -1 ? run.chunks.length : firstUnfinished;
+  let providerConfig: ProviderConfig;
+  try {
+    providerConfig = buildProviderConfig(draft);
+  } catch (error) {
+    const message = `Provider configuration is invalid: ${errorMessage(error)}`;
+    addSessionLog(message, 'error');
+    callbacks.onError(message);
+    return;
+  }
 
+  const baseParallel = draft.maxParallelChunks || 3;
+  const multiplier = draft.parallelMultiplier || 1;
+  const effectiveParallel = Math.max(1, Math.min(100, baseParallel * multiplier));
+  run.config = { ...run.config, maxParallelChunks: effectiveParallel, parallelMultiplier: multiplier };
+  addSessionLog(`[Diagnostic] Chunk timeout: ${CHUNK_TIMEOUT_MS / 1000}s, Effective parallel parts: ${effectiveParallel}, retries per part: ${MAX_RETRIES}`, 'info');
+
+  const firstUnfinished = run.chunks.findIndex(chunk => chunk.status !== 'success');
+  const startIndex = firstUnfinished === -1 ? run.chunks.length : firstUnfinished;
   run.status = 'running';
   if (!run.startedAt) run.startedAt = Date.now();
   saveActiveRun(run);
-
-  const providerConfig = buildProviderConfig(draft);
-
   await runChunks(run, draft, providerConfig, startIndex, callbacks, abortSignal);
 }
 

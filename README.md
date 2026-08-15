@@ -19,7 +19,8 @@ Client-side translation workspace for text and structured text files using OpenA
 - **Multiple providers**: OpenAI-compatible (OpenRouter, DeepSeek, Fireworks, xAI, MiniMax, OpenAI), Anthropic-compatible (Anthropic, DeepSeek), Google Gemini
 - **Smart chunking**: Automatic chunking with overlap for large files, plus a 1×–100× speed control for parallel translation
 - **Novel mode**: Specialized handling for long-form fiction translation
-- **Partial output**: Download, copy, or preview what's translated so far even before a run finishes
+- **Fail-closed output**: Preview progress while a run is active, but download and copy unlock only after every part passes validation
+- **Automatic recovery**: Every part gets up to five retries, followed by safe format-aware sub-splitting when possible
 - **Local-first**: All processing happens in your browser
 - **PWA support**: Works offline after initial load
 

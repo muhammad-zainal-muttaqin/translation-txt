@@ -27,7 +27,7 @@ Warm, literary, unhurried. Feels like a small publishing tool, not an engineerin
 1. **The page order teaches the workflow** — no steppers, wizards, or onboarding copy; sections appear in the order you use them.
 2. **Configuration is nearby, never in the way** — technical controls live one click away in Settings, saved automatically.
 3. **Plain words first, precise words on demand** — "parts" in the main flow, "chunks" inside expandable details and logs.
-4. **Nothing is lost** — partial results are always visible, downloadable, and honestly labeled.
+4. **Fail closed**: partial progress stays available for resume and diagnosis, while files are downloadable only after every part passes validation.
 5. **Warmth from type and accent, not tinted backgrounds** — serif display + terracotta accent on quiet neutral surfaces.
 
 ## Accessibility & Inclusion

@@ -28,6 +28,7 @@ export function ResultSection({ onExpandPreview }: ResultSectionProps) {
   const hasOutput = state.outputView.text.length > 0
   const totalChunks = state.activeRun?.chunks.length || 0
   const isPartial = state.outputView.mode === 'partial'
+  const isCompleted = state.activeRun?.status === 'completed' && state.outputView.mode === 'complete'
 
   if (state.outputView.mode === 'empty') return null
 
@@ -40,12 +41,12 @@ export function ResultSection({ onExpandPreview }: ResultSectionProps) {
   }
 
   const handleDownloadSingle = () => {
-    if (!state.file || !state.outputView.text) return
+    if (!isCompleted || !state.file || !state.outputView.text) return
 
     const filename = generateTranslatedFilename(
       state.file.name,
       state.draft?.targetLanguage || 'en',
-      isPartial
+      false
     )
 
     downloadSingleFile({
@@ -55,11 +56,11 @@ export function ResultSection({ onExpandPreview }: ResultSectionProps) {
   }
 
   const handleDownloadZip = async () => {
-    if (!state.file || totalChunks === 0) return
+    if (!isCompleted || !state.file || totalChunks === 0) return
 
     const targetLang = state.draft?.targetLanguage || 'en'
     const originalName = state.file.name
-    const translatedName = generateTranslatedFilename(originalName, targetLang, isPartial)
+    const translatedName = generateTranslatedFilename(originalName, targetLang, false)
 
     const metadata: Record<string, unknown> = {
       originalFile: originalName,
@@ -70,14 +71,6 @@ export function ResultSection({ onExpandPreview }: ResultSectionProps) {
       totalChunks,
       provider: state.draft?.providerPreset || state.draft?.providerProtocol,
       model: state.draft?.model,
-    }
-
-    if (state.outputView.mode === 'partial') {
-      metadata.isPartial = true
-      metadata.partialMode = 'success-only'
-      metadata.runStatus = state.outputView.runStatus
-      metadata.successfulChunks = state.outputView.successfulChunks
-      metadata.totalChunks = state.outputView.totalChunks
     }
 
     await downloadZip({
@@ -98,8 +91,8 @@ export function ResultSection({ onExpandPreview }: ResultSectionProps) {
         <div className="p-3 rounded-md text-sm bg-warning/10 text-warning">
           <strong>Partial result:</strong> {state.outputView.successfulChunks} of{' '}
           {state.outputView.totalChunks} parts finished before the run{' '}
-          {state.outputView.runStatus === 'running' ? 'continues' : `was ${state.outputView.runStatus}`}. You
-          can download what's done, or resume above.
+          {state.outputView.runStatus === 'running' ? 'continues' : `was ${state.outputView.runStatus}`}. Nothing
+          is downloadable or copyable until every part passes validation.
         </div>
       )}
 
@@ -123,22 +116,26 @@ export function ResultSection({ onExpandPreview }: ResultSectionProps) {
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <Button variant="secondary" size="sm" disabled={!hasOutput} onClick={handleDownloadSingle}>
-          <Download className="h-4 w-4 mr-1" aria-hidden="true" />
-          Download
-        </Button>
-        <Button variant="ghost" size="sm" disabled={!hasOutput || totalChunks === 0} onClick={handleDownloadZip}>
-          <Download className="h-4 w-4 mr-1" aria-hidden="true" />
-          ZIP with original
-        </Button>
-        <Button variant="ghost" size="sm" disabled={!hasOutput} onClick={handleCopy}>
-          {copySuccess ? (
-            <Check className="h-4 w-4 mr-1 text-success" aria-hidden="true" />
-          ) : (
-            <Copy className="h-4 w-4 mr-1" aria-hidden="true" />
-          )}
-          {copySuccess ? 'Copied' : 'Copy'}
-        </Button>
+        {isCompleted && (
+          <>
+            <Button variant="secondary" size="sm" disabled={!hasOutput} onClick={handleDownloadSingle}>
+              <Download className="h-4 w-4 mr-1" aria-hidden="true" />
+              Download
+            </Button>
+            <Button variant="ghost" size="sm" disabled={!hasOutput || totalChunks === 0} onClick={handleDownloadZip}>
+              <Download className="h-4 w-4 mr-1" aria-hidden="true" />
+              ZIP with original
+            </Button>
+            <Button variant="ghost" size="sm" disabled={!hasOutput} onClick={handleCopy}>
+              {copySuccess ? (
+                <Check className="h-4 w-4 mr-1 text-success" aria-hidden="true" />
+              ) : (
+                <Copy className="h-4 w-4 mr-1" aria-hidden="true" />
+              )}
+              {copySuccess ? 'Copied' : 'Copy'}
+            </Button>
+          </>
+        )}
         <Button variant="ghost" size="sm" onClick={onExpandPreview} className="sm:ml-auto">
           <Maximize2 className="h-4 w-4 mr-1" aria-hidden="true" />
           Compare side by side
